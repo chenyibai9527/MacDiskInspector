@@ -85,7 +85,7 @@ final class InspectorViewModel: ObservableObject {
     func chooseAndScan() {
         let panel = NSOpenPanel()
         panel.title = "选择要只读扫描的目录"
-        panel.message = "Mac Disk Inspector 只读取元数据和目录结构，不会修改文件。"
+        panel.message = "Mac Disk Inspector 只读取文件大小、日期和目录结构，不会修改任何文件。"
         panel.prompt = "开始只读扫描"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -96,7 +96,7 @@ final class InspectorViewModel: ObservableObject {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "全盘扫描可能需要较长时间"
-            alert.informativeText = "大型磁盘可能包含数百万个文件。建议先扫描用户目录；继续全盘扫描时可以随时取消。"
+            alert.informativeText = "整块磁盘可能包含数百万个文件，扫描时间会很长。建议先从个人文件夹开始；如果继续，你仍可随时取消。"
             alert.addButton(withTitle: "继续全盘扫描")
             alert.addButton(withTitle: "取消")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -184,7 +184,7 @@ final class InspectorViewModel: ObservableObject {
         case .openApplication:
             guard let bundleID = action.value,
                   let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-                errorMessage = "未找到目标 App。"
+                errorMessage = "没有找到相关应用。"
                 return
             }
             NSWorkspace.shared.openApplication(at: url, configuration: .init())
@@ -193,7 +193,7 @@ final class InspectorViewModel: ObservableObject {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(value, forType: .string)
             statusMessage = action.kind == .copyOfficialCleanupCommand
-                ? "清理命令已复制。本 App 没有执行它。"
+                ? "清理命令已复制。Mac Disk Inspector 没有运行这条命令。"
                 : "检查命令已复制。"
         case .deferAction:
             selectedFinding = nil

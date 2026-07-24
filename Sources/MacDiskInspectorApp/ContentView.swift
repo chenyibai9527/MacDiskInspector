@@ -100,7 +100,7 @@ private struct OverviewView: View {
             VStack(alignment: .leading, spacing: 24) {
                 PageHeader(
                     title: "磁盘概览",
-                    subtitle: "先理解占用，再决定是否处理。扫描只读取所选目录的元数据。"
+                    subtitle: "先看清空间去了哪里，再决定要不要处理。扫描过程中只读取文件信息。"
                 )
 
                 if let capacity = model.capacity {
@@ -144,7 +144,7 @@ private struct OverviewView: View {
             .foregroundStyle(.secondary)
             if let important = capacity.availableForImportantUsageBytes,
                important > capacity.availableBytes {
-                Text("macOS 预计在清理可回收系统数据后，重要任务最多可使用约 \(important.formattedBytes)。这不是当前空闲空间。")
+                Text("macOS 估计，在系统自行回收部分空间后，重要任务最多可使用约 \(important.formattedBytes)。这不是现在的可用空间。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -163,7 +163,7 @@ private struct OverviewView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .frame(height: 34, alignment: .topLeading)
-            Text("已访问 \(progress.entriesVisited.formatted()) 项 · 已计量 \(progress.allocatedBytesMeasured.formattedBytes)")
+            Text("已查看 \(progress.entriesVisited.formatted()) 项 · 已统计 \(progress.allocatedBytesMeasured.formattedBytes)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if model.scanSamples.count > 1 {
@@ -194,7 +194,7 @@ private struct OverviewView: View {
         HStack(spacing: 14) {
             MetricCard(title: "已分配空间", value: report.totalAllocatedBytes.formattedBytes, systemImage: "square.stack.3d.up")
             MetricCard(title: "唯一文件", value: report.uniqueFiles.formatted(), systemImage: "doc.on.doc")
-            MetricCard(title: "发现项", value: report.findings.count.formatted(), systemImage: "list.bullet")
+            MetricCard(title: "分析结果", value: report.findings.count.formatted(), systemImage: "list.bullet")
             MetricCard(title: "访问问题", value: report.totalIssueCount.formatted(), systemImage: "exclamationmark.triangle")
         }
     }
@@ -202,11 +202,11 @@ private struct OverviewView: View {
     private func coverageCard(_ report: ScanReport) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("扫描覆盖状态")
+                Text("本次扫描是否完整")
                     .font(.headline)
                 Spacer()
                 Label(
-                    report.hasCoverageGaps ? "部分覆盖" : "无读取错误",
+                    report.hasCoverageGaps ? "有内容未能读取" : "未发现读取错误",
                     systemImage: report.hasCoverageGaps
                         ? "exclamationmark.triangle.fill"
                         : "checkmark.circle.fill"
@@ -214,8 +214,8 @@ private struct OverviewView: View {
                 .foregroundStyle(report.hasCoverageGaps ? .orange : .green)
             }
             Text(report.hasCoverageGaps
-                ? "有 \(report.inaccessibleIssueCount.formatted()) 个目录或项目无法访问。一个目录可能包含任意数量的数据，因此不显示虚假的百分比。"
-                : "扫描期间没有权限或枚举错误；问题列表仍会记录主动跳过的符号链接、其他卷和特殊文件。")
+                ? "有 \(report.inaccessibleIssueCount.formatted()) 个目录或文件未能读取。无法知道这些目录里还有多少内容，因此这里不显示容易误导的百分比。"
+                : "扫描时没有遇到权限或目录读取错误。主动跳过的符号链接、其他磁盘和特殊文件仍会列在“访问问题”中。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if !report.issues.isEmpty {
@@ -232,7 +232,7 @@ private struct OverviewView: View {
         EmptyStateView(
             title: "尚未扫描目录",
             systemImage: "folder.badge.questionmark",
-            description: "选择一个目录后，App 会在本机读取文件大小、分配空间和修改时间。"
+            description: "选择一个目录后，所有分析都在这台 Mac 上完成，不会改动其中的文件。"
         ) {
             Button("选择目录并扫描…") {
                 model.chooseAndScan()
@@ -263,7 +263,7 @@ private struct FindingsView: View {
                 }
                 .padding()
 
-                Text("已隐藏零占用项目和扫描根目录汇总；目录条目可能包含其下级内容。")
+                Text("已隐藏占用为零的项目和最外层目录汇总。文件夹大小包含其中的下级内容。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -299,7 +299,7 @@ private struct FindingsView: View {
                     FindingDetailView(finding: finding)
                 } else {
                     EmptyStateView(
-                        title: "选择一项查看证据",
+                        title: "选择一项查看详情",
                         systemImage: "doc.text.magnifyingglass"
                     )
                 }
@@ -360,11 +360,11 @@ private struct FindingDetailView: View {
 
                 Divider()
                 detailGrid
-                DetailSection(title: "为什么出现", text: finding.explanation)
-                DetailSection(title: "建议", text: finding.recommendedAction)
+                DetailSection(title: "这是什么", text: finding.explanation)
+                DetailSection(title: "可以怎么做", text: finding.recommendedAction)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("可验证动作")
+                    Text("你可以这样做")
                         .font(.headline)
                     ForEach(advisor.actions(for: finding)) { action in
                         Button {
@@ -394,10 +394,10 @@ private struct FindingDetailView: View {
             detailRow("逻辑大小", finding.logicalBytes.formattedBytes)
             detailRow("文件数量", finding.fileCount.formatted())
             detailRow("来源应用", finding.sourceApplication ?? "未知")
-            detailRow("规则置信度", finding.confidence.rawValue)
+            detailRow("判断把握", finding.confidence.rawValue)
             detailRow(
-                "候选空间",
-                finding.potentialReclaimableBytes?.formattedBytes ?? "不估算"
+                "可能可释放",
+                finding.potentialReclaimableBytes?.formattedBytes ?? "暂不估算"
             )
             if let date = finding.lastModified {
                 detailRow("最近修改", date.formatted(date: .abbreviated, time: .shortened))
@@ -423,7 +423,7 @@ private struct RecommendationsView: View {
             VStack(alignment: .leading, spacing: 22) {
                 PageHeader(
                     title: "建议中心",
-                    subtitle: "所有动作都由你决定。命令只会复制到剪贴板，本 App 从不执行。"
+                    subtitle: "这里只列出值得进一步核对的内容。是否处理、如何处理，都由你决定。"
                 )
 
                 ForEach(model.recommendationFindings) { finding in
@@ -434,7 +434,7 @@ private struct RecommendationsView: View {
                                 .font(.headline)
                             Text(finding.recommendedAction)
                                 .foregroundStyle(.secondary)
-                            Text("候选空间 \(finding.potentialReclaimableBytes?.formattedBytes ?? "待确认") · 不是释放承诺")
+                            Text("可能可释放 \(finding.potentialReclaimableBytes?.formattedBytes ?? "待确认") · 实际结果可能更少")
                                 .font(.caption)
                         }
                         Spacer()
@@ -449,9 +449,9 @@ private struct RecommendationsView: View {
 
                 if model.recommendationFindings.isEmpty {
                     EmptyStateView(
-                        title: "暂无候选建议",
+                        title: "暂时没有可操作的建议",
                         systemImage: "checkmark.shield",
-                        description: "未知或高风险数据不会被标记为候选空间。"
+                        description: "用途不明或风险较高的数据不会计入“可能可释放”。"
                     )
                         .frame(maxWidth: .infinity, minHeight: 280)
                 }
@@ -497,9 +497,9 @@ private struct UsageVisualization: View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("一级目录空间分布")
+                    Text("第一层文件夹占用")
                         .font(.headline)
-                    Text("各条互不重叠；深层规则发现不在这里重复累计。")
+                    Text("图中每一项只计算一次，更深层的分析结果不会重复叠加。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -538,7 +538,7 @@ private struct IssuesView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("访问问题")
                     .font(.largeTitle.bold())
-                Text("这些路径没有被完整计量。无权限不等于零占用。")
+                Text("下面这些内容没有读完整。无法读取，不代表它们不占空间。")
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -548,7 +548,7 @@ private struct IssuesView: View {
 
             if let issues = model.report?.issues, !issues.isEmpty {
                 if let report = model.report, report.omittedIssueCount > 0 {
-                    Text("为控制全盘扫描内存，仅展示前 \(issues.count.formatted()) 项；另有 \(report.omittedIssueCount.formatted()) 项未保存在报告中。")
+                    Text("为避免全盘扫描占用过多内存，这里只保留前 \(issues.count.formatted()) 项；另外 \(report.omittedIssueCount.formatted()) 项只计数，不保留明细。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -579,7 +579,7 @@ private struct IssuesView: View {
                 EmptyStateView(
                     title: "没有记录到访问问题",
                     systemImage: "checkmark.shield",
-                    description: "这不代表绕过了 macOS 权限；仅表示本次所选范围没有返回访问错误。"
+                    description: "这只说明本次选择的范围没有报告读取错误，并不表示应用绕过了 macOS 的权限限制。"
                 )
             }
         }
@@ -592,33 +592,33 @@ private struct GuideView: View {
             VStack(alignment: .leading, spacing: 22) {
                 PageHeader(
                     title: "使用说明",
-                    subtitle: "Mac Disk Inspector 负责解释，不替你做删除决定。"
+                    subtitle: "它帮你看清空间去了哪里，但不会替你删除任何东西。"
                 )
 
                 guideSection(
-                    "推荐使用方式",
+                    "从哪里开始",
                     systemImage: "1.circle",
-                    text: "先扫描用户目录或某个应用目录，再查看一级目录分布、访问问题和具体 Finding。只有确认来源、用途和备份后，才在目标 App、Finder 或终端中自行处理。"
+                    text: "第一次使用，建议先选择你的个人文件夹，或某个已经怀疑占用较大的应用目录。扫描完成后，先看占用排行，再打开具体项目查看说明和处理建议。"
                 )
                 guideSection(
-                    "为什么全盘扫描很慢",
+                    "为什么不建议一上来扫描整块硬盘",
                     systemImage: "clock",
-                    text: "准确统计必须访问每个文件的元数据。数百万个小文件可能需要数十分钟；系统休眠、外置盘和权限检查也会影响速度。你可以随时取消，优先扫描怀疑的目录通常更有效。"
+                    text: "扫描速度主要取决于文件数量，而不是磁盘容量。几十万个小文件往往比一个很大的文件更耗时。你可以随时取消；从个人文件夹或可疑目录开始，通常更快找到问题。"
                 )
                 guideSection(
-                    "候选空间不是释放承诺",
+                    "“可能可释放”该怎么看",
                     systemImage: "chart.bar.doc.horizontal",
-                    text: "候选空间表示值得进一步核对的数据体积。APFS Clone、稀疏文件、正在使用的数据和应用重建行为都会影响最终释放量。"
+                    text: "这个数字表示“值得继续核对的大小”，不等于一定能腾出的空间。共享磁盘块、稀疏文件、正在使用的文件，以及应用重新生成缓存，都会让实际结果变少。"
                 )
                 guideSection(
-                    "隐私和只读边界",
+                    "你的数据会离开这台 Mac 吗",
                     systemImage: "lock.shield",
-                    text: "App 不上传路径、文件名或统计数据；不执行 Shell 命令；不删除、移动或修改扫描到的文件。复制的命令必须由你在终端中主动执行。"
+                    text: "不会。路径、文件名和扫描结果都只留在本机。Mac Disk Inspector 不联网，不删除、不移动、不修改文件，也不会替你运行任何终端命令。"
                 )
                 guideSection(
-                    "遇到无权限",
+                    "为什么有些目录读不到",
                     systemImage: "hand.raised",
-                    text: "Mail、Messages、Safari 等目录可能受 macOS 保护。App 会把它们列为访问缺口，不会把它们当成零字节，也不会要求管理员权限。"
+                    text: "“邮件”“信息”、Safari 等目录受 macOS 保护。读不到时，应用会如实列出这些目录，不会把它们算成零，也不会要求管理员权限。"
                 )
             }
             .padding(28)
@@ -641,8 +641,8 @@ private struct GuideView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
         .inspectorCard()
-        .frame(maxWidth: .infinity)
     }
 }
 

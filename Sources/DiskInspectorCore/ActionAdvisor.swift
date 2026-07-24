@@ -40,7 +40,7 @@ public struct ActionAdvisor: Sendable {
             SuggestedAction(
                 id: "finder",
                 kind: .revealInFinder,
-                title: "在 Finder 中显示",
+                title: "在访达中显示",
                 value: finding.path,
                 isDestructive: false
             )
@@ -76,7 +76,7 @@ public struct ActionAdvisor: Sendable {
                 SuggestedAction(
                     id: "app.\(bundleIdentifier)",
                     kind: .openApplication,
-                    title: "打开目标 App",
+                    title: "打开相关应用",
                     value: bundleIdentifier,
                     isDestructive: false
                 )
