@@ -1,0 +1,36 @@
+name: Feature request
+description: 建议新的解释规则、只读分析或体验改进
+title: "[Feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 请描述诊断场景，而不是要求 App 自动删除数据。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 可验证证据
+      description: 可提供脱敏后的目录模式、来源应用和官方清理入口。
+  - type: dropdown
+    id: category
+    attributes:
+      label: 建议类型
+      options:
+        - 新 Finding 规则
+        - 扫描性能或覆盖率
+        - 可视化与交互
+        - 文档与无障碍
+        - 构建与分发
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: 产品边界
+      options:
+        - label: 我理解本项目默认只读，不接受一键清理或任意 Shell 执行能力
+          required: true

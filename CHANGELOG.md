@@ -1,0 +1,28 @@
+# 更新日志
+
+本项目遵循 [Semantic Versioning](https://semver.org/)；候选版本在版本号后使用 `-rcN`。
+
+## [0.2.0-rc1] - 2026-07-24
+
+### 新增
+
+- 原生 SwiftUI 磁盘概览、占用排行、Finding 详情和建议中心。
+- 用户显式选择目录后的本地只读扫描，支持取消、覆盖率和权限缺口。
+- allocated/logical size、文件数、修改时间、多级目录聚合。
+- 符号链接跳过、默认不跨卷、设备号与 inode 硬链接去重。
+- npm、Library Caches、Antigravity browser recordings、Cursor 数据库、微信容器、Chrome 本地模型、swapfile 和系统区域规则。
+- 固定 allowlist 的检查/清理命令复制，不执行 Shell。
+- 空间构成与风险分布可视化、大目录提示和使用说明。
+- Universal（arm64 + x86_64）社区预览包与可复现验证脚本。
+
+### 安全
+
+- App Sandbox 仅声明用户选择目录只读权限。
+- 无网络 entitlement、遥测、删除、移动、`sudo` 或 privileged helper。
+- 高风险和系统管理数据不提供删除命令。
+
+### 已知限制
+
+- 社区包采用 ad-hoc 签名，未经过 Apple Developer ID 签名与公证。
+- 首次打开可能需要 Finder 中右键“打开”，不同 macOS 安全策略下表现可能不同。
+- Mail、Messages、Safari 等受保护目录的覆盖率取决于用户授予的系统权限。

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Run unit tests
+        run: swift test
+
+      - name: Run core safety verification
+        run: swift run DiskInspectorCoreVerification
+
+      - name: Build universal macOS app
+        run: ./Scripts/build-app.sh
+
+      - name: Verify universal architectures
+        run: |
+          lipo \
+            build/DerivedData/Build/Products/Release/MacDiskInspector.app/Contents/MacOS/MacDiskInspector \
+            -verify_arch arm64 x86_64
+
+      - name: Check source safety invariants
+        run: ./Scripts/check-source-safety.sh

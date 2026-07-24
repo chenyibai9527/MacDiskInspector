@@ -1,0 +1,58 @@
+name: Build community package
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_label:
+        description: Safe release label, for example 0.2.0-rc1
+        required: true
+        default: 0.2.0-rc1
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Test
+        run: |
+          swift test
+          swift run DiskInspectorCoreVerification
+
+      - name: Build ad-hoc signed community package
+        env:
+          MDI_RELEASE_LABEL: ${{ inputs.release_label }}
+        run: ./Scripts/package-community-preview.sh
+
+      - name: Verify package
+        env:
+          MDI_RELEASE_LABEL: ${{ inputs.release_label }}
+        run: |
+          ./Scripts/verify-community-package.sh \
+            "build/community/MacDiskInspector-${MDI_RELEASE_LABEL}-universal-community.zip"
+
+      - name: Write checksum
+        env:
+          MDI_RELEASE_LABEL: ${{ inputs.release_label }}
+        run: |
+          cd build/community
+          shasum -a 256 \
+            "MacDiskInspector-${MDI_RELEASE_LABEL}-universal-community.zip" \
+            > "MacDiskInspector-${MDI_RELEASE_LABEL}-universal-community.zip.sha256"
+
+      - name: Upload package for maintainer review
+        uses: actions/upload-artifact@v4
+        with:
+          name: MacDiskInspector-${{ inputs.release_label }}-community
+          path: |
+            build/community/*.zip
+            build/community/*.sha256
+          if-no-files-found: error
+          retention-days: 14

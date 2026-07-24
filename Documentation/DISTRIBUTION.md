@@ -1,0 +1,74 @@
+# 官网分发与公证
+
+本项目不提交 Mac App Store。公开版本使用 Developer ID 签名、Hardened Runtime、App Sandbox 和 Apple notarization。
+
+## 前置条件
+
+- Apple Developer Program 账户；
+- 本机钥匙串中的 `Developer ID Application` 证书；
+- Xcode 已登录对应 Team；
+- 使用 `xcrun notarytool store-credentials` 创建的钥匙串 profile。
+
+## 无签名验证
+
+```bash
+./Scripts/build-app.sh
+```
+
+产物位于：
+
+```text
+build/DerivedData/Build/Products/Release/MacDiskInspector.app
+```
+
+## 没有 Developer ID 时
+
+可以发布未签名或 ad-hoc 签名的社区构建，但它不是无感安装：
+
+1. 用户下载并解压 `.zip`，把 App 拖入“应用程序”；
+2. 第一次双击通常会被 Gatekeeper 阻止；
+3. 用户打开“系统设置 → 隐私与安全性”，在安全区域点击“仍要打开”；
+4. 输入自己的登录密码确认；之后通常可以正常双击启动。
+
+不要指导用户全局关闭 Gatekeeper，也不要把删除 quarantine 属性作为默认安装方式。公司管理的 Mac 可能由管理员策略禁止“仍要打开”，这种情况下未签名版本无法使用。
+
+未签名、self-signed 和 ad-hoc 签名都不能证明发布者身份，也不能向 Apple 公证。源码公开、可复现构建和 SHA-256 可以改善供应链透明度，但不能替代 Developer ID 的系统信任体验。
+
+推荐无账号版本使用 ad-hoc 签名，以保留 App Sandbox 与只读 entitlement：
+
+```bash
+./Scripts/package-community-preview.sh
+```
+
+该脚本生成的仍是“未知开发者”社区版本，不应标注为 Apple 已验证或已公证。
+
+## 签名、归档与公证
+
+不要把 Team ID、App Store Connect 密钥或公证密码提交到仓库。通过环境变量传入：
+
+```bash
+export MDI_TEAM_ID="YOUR_TEAM_ID"
+export MDI_NOTARY_PROFILE="MacDiskInspector-Notary"
+./Scripts/archive-notarize.sh
+```
+
+脚本会：
+
+1. 创建 Release archive；
+2. 使用 Developer ID 导出 `.app`；
+3. 创建公证 ZIP；
+4. 等待 Apple notarization；
+5. staple ticket；
+6. 使用 `codesign` 和 `spctl` 验证。
+
+## 官网发布清单
+
+- 更新 `MARKETING_VERSION` 与 `CURRENT_PROJECT_VERSION`；
+- 运行 `swift test` 和 Release 构建；
+- 验证 entitlements 中没有网络或写权限；
+- 公证并 staple；
+- 生成 SHA-256；
+- 发布 `.dmg` 或 `.zip`、哈希、签名 Team ID、源代码 tag 和变更日志；
+- 在干净账户上验证 Gatekeeper 首次启动；
+- 测试 macOS 13、14、15 和当前版本；
+- 保留公证日志与构建 tag。

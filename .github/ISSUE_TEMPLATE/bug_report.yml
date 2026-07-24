@@ -1,0 +1,54 @@
+name: Bug report
+description: 报告可复现的扫描、规则、界面或构建问题
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请不要上传真实用户名、完整私人路径、聊天数据库、文件名列表或其他敏感内容。
+        安全漏洞请按 SECURITY.md 私密报告，不要创建公开 Issue。
+  - type: input
+    id: version
+    attributes:
+      label: App 版本
+      placeholder: 例如 0.2.0-rc1
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 与 Mac 型号
+      placeholder: 例如 macOS 15.5，Apple Silicon
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么，预期是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 最小复现步骤
+      description: 请尽量使用临时测试目录，不要提供私人数据。
+      placeholder: |
+        1. 创建测试目录……
+        2. 在 App 中选择……
+        3. 看到……
+    validations:
+      required: true
+  - type: textarea
+    id: coverage
+    attributes:
+      label: 扫描状态
+      description: 可提供文件数、覆盖率、权限错误数量；请隐藏私人路径。
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已移除截图和日志中的私人路径、文件名与个人数据
+          required: true

@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode local state
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# Release artifacts and signing material
+*.zip
+*.dmg
+*.pkg
+*.p12
+*.cer
+*.provisionprofile
+*.mobileprovision
+
+# Local secrets
+.env
+.env.*
+!.env.example
+*.key
