@@ -10,6 +10,12 @@ final class InspectorViewModel: ObservableObject {
         let allocatedBytes: Int64
     }
 
+    struct FindingGroup: Identifiable, Sendable {
+        let id: String
+        let title: String
+        let findings: [Finding]
+    }
+
     enum Section: String, CaseIterable, Identifiable {
         case overview = "磁盘概览"
         case findings = "占用排行"
@@ -41,6 +47,7 @@ final class InspectorViewModel: ObservableObject {
         didSet { scheduleSort() }
     }
     @Published private(set) var displayedFindings: [Finding] = []
+    @Published private(set) var findingGroups: [FindingGroup] = []
     @Published private(set) var recommendationFindings: [Finding] = []
     @Published private(set) var scanSamples: [ScanSample] = []
     @Published private(set) var isSorting = false
@@ -54,32 +61,33 @@ final class InspectorViewModel: ObservableObject {
     private var sortGeneration = UUID()
 
     enum FindingSort: String, CaseIterable, Identifiable, Sendable {
-        case size = "占用"
-        case category = "类别"
+        case size = "大小"
+        case category = "类型"
         case risk = "风险"
         var id: String { rawValue }
+
+        var explanation: String {
+            switch self {
+            case .size: "按占用空间从大到小排列"
+            case .category: "按数据类型分组，每组内从大到小排列"
+            case .risk: "按风险高低分组，每组内从大到小排列"
+            }
+        }
+
+        nonisolated var coreMode: FindingSortMode {
+            switch self {
+            case .size: .size
+            case .category: .category
+            case .risk: .risk
+            }
+        }
     }
 
     nonisolated private static func sort(
         _ findings: [Finding],
         by mode: FindingSort
     ) -> [Finding] {
-        findings.sorted {
-            switch mode {
-            case .size:
-                return $0.allocatedBytes > $1.allocatedBytes
-            case .category:
-                if $0.category.rawValue == $1.category.rawValue {
-                    return $0.allocatedBytes > $1.allocatedBytes
-                }
-                return $0.category.rawValue < $1.category.rawValue
-            case .risk:
-                if $0.risk.rank == $1.risk.rank {
-                    return $0.allocatedBytes > $1.allocatedBytes
-                }
-                return $0.risk.rank > $1.risk.rank
-            }
-        }
+        FindingSorter().sort(findings, by: mode.coreMode)
     }
 
     func chooseAndScan() {
@@ -111,6 +119,7 @@ final class InspectorViewModel: ObservableObject {
         report = nil
         progress = nil
         displayedFindings = []
+        findingGroups = []
         recommendationFindings = []
         scanSamples = []
         errorMessage = nil
@@ -156,7 +165,7 @@ final class InspectorViewModel: ObservableObject {
                 self.report = scanReport
                 self.selectedFinding = scanReport.findings.first
                 self.isScanning = false
-                self.scheduleSort()
+                self.scheduleSort(refreshRecommendations: true)
             } catch is CancellationError {
                 if scanGeneration == generation {
                     self.isScanning = false
@@ -209,7 +218,7 @@ final class InspectorViewModel: ObservableObject {
         }
     }
 
-    private func scheduleSort() {
+    private func scheduleSort(refreshRecommendations: Bool = false) {
         sortTask?.cancel()
         let allFindings = report?.findings ?? []
         let nonEmptyFindings = allFindings.filter { $0.allocatedBytes > 0 }
@@ -217,6 +226,7 @@ final class InspectorViewModel: ObservableObject {
         let findings = findingsWithoutRoot.isEmpty ? nonEmptyFindings : findingsWithoutRoot
         guard !findings.isEmpty else {
             displayedFindings = []
+            findingGroups = []
             recommendationFindings = []
             isSorting = false
             return
@@ -226,13 +236,53 @@ final class InspectorViewModel: ObservableObject {
         let generation = sortGeneration
         isSorting = true
         sortTask = Task { [weak self] in
-            let sorted = await Task.detached(priority: .userInitiated) {
-                Self.sort(findings, by: mode)
+            let result = await Task.detached(priority: .userInitiated) {
+                let sorted = Self.sort(findings, by: mode)
+                let groups = Self.groups(from: sorted, mode: mode)
+                let recommendations = refreshRecommendations
+                    ? Self.nonOverlappingRecommendations(from: findings)
+                    : nil
+                return (sorted, groups, recommendations)
             }.value
             guard let self, !Task.isCancelled, self.sortGeneration == generation else { return }
-            self.displayedFindings = sorted
-            self.recommendationFindings = Self.nonOverlappingRecommendations(from: sorted)
+            self.displayedFindings = result.0
+            self.findingGroups = result.1
+            if self.selectedFinding.map({ selected in
+                result.0.contains(where: { $0.id == selected.id })
+            }) != true {
+                self.selectedFinding = result.0.first
+            }
+            if let recommendations = result.2 {
+                self.recommendationFindings = recommendations
+            }
             self.isSorting = false
+        }
+    }
+
+    nonisolated private static func groups(
+        from findings: [Finding],
+        mode: FindingSort
+    ) -> [FindingGroup] {
+        guard !findings.isEmpty else { return [] }
+        if mode == .size {
+            return [FindingGroup(id: "size", title: "从大到小", findings: findings)]
+        }
+
+        var orderedTitles: [String] = []
+        var buckets: [String: [Finding]] = [:]
+        for finding in findings {
+            let title = mode == .category ? finding.category.rawValue : finding.risk.rawValue
+            if buckets[title] == nil {
+                orderedTitles.append(title)
+            }
+            buckets[title, default: []].append(finding)
+        }
+        return orderedTitles.map { title in
+            FindingGroup(
+                id: "\(mode.rawValue).\(title)",
+                title: title,
+                findings: buckets[title] ?? []
+            )
         }
     }
 

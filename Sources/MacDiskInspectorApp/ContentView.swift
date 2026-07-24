@@ -263,12 +263,15 @@ private struct FindingsView: View {
                 }
                 .padding()
 
-                Text("已隐藏占用为零的项目和最外层目录汇总。文件夹大小包含其中的下级内容。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.bottom, 10)
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(model.sortMode.explanation, systemImage: "arrow.up.arrow.down")
+                    Text("已隐藏占用为零的项目和最外层目录汇总。文件夹大小包含其中的下级内容。")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .padding(.bottom, 10)
 
                 Divider()
 
@@ -279,9 +282,15 @@ private struct FindingsView: View {
                         description: "先选择目录开始只读扫描。"
                     )
                 } else {
-                    List(model.displayedFindings, selection: $model.selectedFinding) { finding in
-                        FindingRow(finding: finding)
-                            .tag(finding)
+                    List(selection: $model.selectedFinding) {
+                        ForEach(model.findingGroups) { group in
+                            Section(group.title) {
+                                ForEach(group.findings) { finding in
+                                    FindingRow(finding: finding)
+                                        .tag(finding)
+                                }
+                            }
+                        }
                     }
                     .overlay {
                         if model.isSorting {

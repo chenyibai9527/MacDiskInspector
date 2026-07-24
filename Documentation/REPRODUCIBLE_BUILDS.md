@@ -29,7 +29,7 @@ swift run DiskInspectorCoreVerification
 ./Scripts/check-source-safety.sh
 ./Scripts/package-community-preview.sh
 ./Scripts/verify-community-package.sh \
-  build/community/MacDiskInspector-0.2.0-rc2-universal-community.zip
+  build/community/MacDiskInspector-0.2.0-rc3-universal-community.zip
 ```
 
 包脚本只接受字母、数字、点、下划线和连字符组成的短版本标签，避免 CI 输入形成意外路径。

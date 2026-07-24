@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_label:
-        description: Safe release label, for example 0.2.0-rc2
+        description: Safe release label, for example 0.2.0-rc3
         required: true
-        default: 0.2.0-rc2
+        default: 0.2.0-rc3
         type: string
 
 permissions:
