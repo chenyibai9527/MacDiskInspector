@@ -4,7 +4,7 @@ set -euo pipefail
 MDI_PROJECT_ROOT=${0:A:h:h}
 MDI_APP_PATH="$MDI_PROJECT_ROOT/build/DerivedData/Build/Products/Release/MacDiskInspector.app"
 MDI_OUTPUT_DIR="$MDI_PROJECT_ROOT/build/community"
-MDI_RELEASE_LABEL=${MDI_RELEASE_LABEL:-0.2.0-rc3}
+MDI_RELEASE_LABEL=${MDI_RELEASE_LABEL:-0.2.0-rc4}
 MDI_ZIP_PATH="$MDI_OUTPUT_DIR/MacDiskInspector-$MDI_RELEASE_LABEL-universal-community.zip"
 
 if [[ ! "$MDI_RELEASE_LABEL" =~ '^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$' ]]; then

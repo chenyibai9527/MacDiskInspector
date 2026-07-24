@@ -2,6 +2,19 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)；候选版本在版本号后使用 `-rcN`。
 
+## [0.2.0-rc4] - 2026-07-24
+
+### 新增
+
+- 在 macOS 26 及以上使用原生 SwiftUI Liquid Glass。
+- 占用排行排序器使用 `GlassEffectContainer`、玻璃按钮和选中态突出样式。
+- 主要操作、详情操作和临时状态提示使用系统 Liquid Glass。
+- macOS 13–15 保留原有标准材质和按钮样式。
+
+### 工程
+
+- GitHub Actions 切换至 macOS 26 runner，确保使用包含 Liquid Glass API 的 Xcode 26 SDK。
+
 ## [0.2.0-rc3] - 2026-07-24
 
 ### 修复

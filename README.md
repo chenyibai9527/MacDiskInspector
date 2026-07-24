@@ -21,10 +21,11 @@ Mac Disk Inspector 是一个原生 macOS、默认只读的“可解释磁盘诊�
 - 将扫描证据映射为 Finding：路径、allocated/logical bytes、文件数、修改时间、来源、类别、风险、置信度、解释、候选空间和建议；
 - 首批规则覆盖 npm、`Library/Caches`、Gemini/Antigravity `browser_recordings`、Cursor `state.vscdb`、微信容器、Chrome `OnDeviceModel`、swapfile 和系统区域；
 - 仅从编译进 App 的固定 allowlist 提供命令，且只复制、不执行。
+- 在 macOS 26 及以上采用原生 Liquid Glass 功能层；macOS 13–15 自动回退到标准材质。
 
 ## 运行
 
-要求 macOS 13+ 和完整 Xcode。开发正式 `.app`：
+运行要求 macOS 13+。从源码构建要求完整 Xcode 26 或更新版本，以编译 Liquid Glass API。开发正式 `.app`：
 
 ```text
 open MacDiskInspector.xcodeproj
@@ -79,7 +80,8 @@ SECURITY.md                 漏洞报告与安全政策
 - [隐私说明](Documentation/PRIVACY.md)
 - [官网分发与公证](Documentation/DISTRIBUTION.md)
 - [RC 发布清单](Documentation/RELEASE_CHECKLIST.md)
-- [RC3 验收结果](Documentation/RC3_ACCEPTANCE.md)
+- [RC4 Liquid Glass 验收结果](Documentation/RC4_ACCEPTANCE.md)
+- [RC3 历史验收结果](Documentation/RC3_ACCEPTANCE.md)
 - [RC2 历史验收结果](Documentation/RC2_ACCEPTANCE.md)
 - [RC1 历史验收结果](Documentation/RC1_ACCEPTANCE.md)
 - [大目录性能结果](Documentation/BENCHMARK_RESULTS.md)

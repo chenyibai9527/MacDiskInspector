@@ -7,7 +7,7 @@
 ## 环境
 
 - macOS 13 或更高版本；
-- 完整 Xcode，当前项目 CI 使用 `macos-15` runner；
+- 完整 Xcode 26 或更新版本，当前项目 CI 使用 `macos-26` runner；
 - Swift Package Manager；
 - 不需要第三方包管理器或运行时依赖。
 
@@ -29,7 +29,7 @@ swift run DiskInspectorCoreVerification
 ./Scripts/check-source-safety.sh
 ./Scripts/package-community-preview.sh
 ./Scripts/verify-community-package.sh \
-  build/community/MacDiskInspector-0.2.0-rc3-universal-community.zip
+  build/community/MacDiskInspector-0.2.0-rc4-universal-community.zip
 ```
 
 包脚本只接受字母、数字、点、下划线和连字符组成的短版本标签，避免 CI 输入形成意外路径。

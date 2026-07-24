@@ -70,7 +70,7 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(.thickMaterial, in: Capsule())
+                .adaptiveStatusGlass()
                 .shadow(radius: 12, y: 4)
                 .padding(.bottom, 18)
             }
@@ -222,6 +222,7 @@ private struct OverviewView: View {
                 Button("查看问题 \(report.totalIssueCount.formatted()) 项") {
                     model.selectedSection = .issues
                 }
+                .adaptiveGlassButtonStyle()
             }
         }
         .inspectorCard()
@@ -237,7 +238,7 @@ private struct OverviewView: View {
             Button("选择目录并扫描…") {
                 model.chooseAndScan()
             }
-            .buttonStyle(.borderedProminent)
+            .adaptiveProminentGlassButtonStyle()
         }
         .frame(maxWidth: .infinity, minHeight: 320)
     }
@@ -253,12 +254,7 @@ private struct FindingsView: View {
                     Text("占用排行")
                         .font(.title2.bold())
                     Spacer()
-                    Picker("排序", selection: $model.sortMode) {
-                        ForEach(InspectorViewModel.FindingSort.allCases) { mode in
-                            Text(mode.rawValue).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    AdaptiveFindingSortPicker(selection: $model.sortMode)
                     .frame(width: 230)
                 }
                 .padding()
@@ -389,7 +385,7 @@ private struct FindingDetailView: View {
                                 }
                             }
                         }
-                        .buttonStyle(.bordered)
+                        .adaptiveGlassButtonStyle()
                     }
                 }
             }
@@ -451,6 +447,7 @@ private struct RecommendationsView: View {
                             model.selectedFinding = finding
                             model.selectedSection = .findings
                         }
+                        .adaptiveGlassButtonStyle()
                     }
                     .inspectorCard()
                     .frame(maxWidth: .infinity)
