@@ -42,6 +42,7 @@ final class InspectorViewModel: ObservableObject {
     @Published var capacity: VolumeCapacity?
     @Published var progress: ScanProgress?
     @Published var isScanning = false
+    @Published private(set) var scanRootPath: String?
     @Published var errorMessage: String?
     @Published var sortMode: FindingSort = .size {
         didSet { scheduleSort() }
@@ -125,6 +126,7 @@ final class InspectorViewModel: ObservableObject {
         errorMessage = nil
         statusMessage = nil
         selectedFinding = nil
+        scanRootPath = url.standardizedFileURL.path
         isScanning = true
         selectedSection = .overview
 

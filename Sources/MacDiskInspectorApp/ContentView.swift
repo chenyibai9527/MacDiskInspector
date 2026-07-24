@@ -4,10 +4,11 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var model: InspectorViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationSplitView {
-            List(InspectorViewModel.Section.allCases, selection: $model.selectedSection) { section in
+            List(InspectorViewModel.Section.allCases, selection: sectionSelection) { section in
                 Label(section.rawValue, systemImage: section.systemImage)
                     .tag(section)
             }
@@ -16,33 +17,39 @@ struct ContentView: View {
                 privacyFooter
             }
         } detail: {
-            Group {
-                switch model.selectedSection ?? .overview {
-                case .overview:
-                    OverviewView()
-                case .findings:
-                    FindingsView()
-                case .recommendations:
-                    RecommendationsView()
-                case .issues:
-                    IssuesView()
-                case .guide:
-                    GuideView()
-                }
-            }
-            .toolbar {
-                ToolbarItemGroup {
-                    if model.isScanning {
-                        Button("取消", role: .cancel) {
-                            model.cancelScan()
+            ZStack {
+                InspectorBackdrop()
+
+                VStack(spacing: 0) {
+                    ScanCommandBar()
+                        .padding(.horizontal, 20)
+                        .padding(.top, 14)
+                        .padding(.bottom, 8)
+                        .zIndex(2)
+
+                    Group {
+                        switch model.selectedSection ?? .overview {
+                        case .overview:
+                            OverviewView()
+                        case .findings:
+                            FindingsView()
+                        case .recommendations:
+                            RecommendationsView()
+                        case .issues:
+                            IssuesView()
+                        case .guide:
+                            GuideView()
                         }
                     }
-                    Button {
-                        model.chooseAndScan()
-                    } label: {
-                        Label("选择目录", systemImage: "folder.badge.plus")
-                    }
-                    .disabled(model.isScanning)
+                    .id(model.selectedSection)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                removal: .opacity.combined(with: .move(edge: .leading))
+                            )
+                    )
                 }
             }
         }
@@ -73,8 +80,28 @@ struct ContentView: View {
                 .adaptiveStatusGlass()
                 .shadow(radius: 12, y: 4)
                 .padding(.bottom, 18)
+                .transition(reduceMotion ? .opacity : .scale(scale: 0.94).combined(with: .opacity))
             }
         }
+        .animation(
+            reduceMotion ? .linear(duration: 0.16) : .spring(response: 0.36, dampingFraction: 1),
+            value: model.statusMessage
+        )
+    }
+
+    private var sectionSelection: Binding<InspectorViewModel.Section?> {
+        Binding(
+            get: { model.selectedSection },
+            set: { newValue in
+                withAnimation(
+                    reduceMotion
+                        ? .linear(duration: 0.16)
+                        : .spring(response: 0.36, dampingFraction: 1)
+                ) {
+                    model.selectedSection = newValue
+                }
+            }
+        )
     }
 
     private var privacyFooter: some View {
@@ -87,8 +114,65 @@ struct ContentView: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.regularMaterial)
+        .padding(14)
+        .adaptiveFunctionalGlass(cornerRadius: 16)
+        .padding(10)
+    }
+}
+
+private struct ScanCommandBar: View {
+    @EnvironmentObject private var model: InspectorViewModel
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(model.isScanning ? Color.accentColor.opacity(0.16) : Color.green.opacity(0.14))
+                Image(systemName: model.isScanning ? "waveform.path.ecg" : "lock.shield.fill")
+                    .foregroundStyle(model.isScanning ? Color.accentColor : Color.green)
+            }
+            .frame(width: 36, height: 36)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(model.isScanning ? "正在本机只读扫描" : "本机分析 · 不会删除文件")
+                    .font(.headline)
+                Text(scopeDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if model.isScanning {
+                ProgressView()
+                    .controlSize(.small)
+                Button("取消", role: .cancel) {
+                    model.cancelScan()
+                }
+                .adaptiveGlassButtonStyle()
+            } else {
+                Button {
+                    model.chooseAndScan()
+                } label: {
+                    Label(model.report == nil ? "选择目录" : "重新扫描", systemImage: "folder.badge.plus")
+                }
+                .adaptiveProminentGlassButtonStyle()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: 980)
+        .adaptiveFunctionalGlass(cornerRadius: 20, interactive: true)
+        .shadow(color: .black.opacity(0.12), radius: 18, y: 7)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var scopeDescription: String {
+        if let path = model.scanRootPath {
+            return path
+        }
+        return "路径、文件名和统计结果不会离开这台 Mac"
     }
 }
 
@@ -121,7 +205,6 @@ private struct OverviewView: View {
             .frame(maxWidth: 980, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private func capacityCard(_ capacity: VolumeCapacity) -> some View {
