@@ -50,3 +50,9 @@
 - 实际运行 Debug `.app`，只读扫描项目内 `build/ui-sort-fixture`，验证概览、占用排行、类型排序和使用说明。
 - 排序切换后分组标题和说明正确更新，界面未出现阻塞。
 - 21 项单元测试通过，Xcode 26.5 Debug `.app` 构建通过；未扫描工作区外用户数据，未执行清理命令。
+
+## 2026-07-25 Xcode 入口兼容性修复
+
+- 复现 Xcode 构建 Swift Package 辅助可执行 target 时的 `@main` 与 `main.swift` 隐式入口冲突。
+- 将 `DiskInspectorCoreVerification/main.swift` 和 `DiskInspectorBenchmark/main.swift` 改为与入口类型同名的普通 Swift 文件，继续保留显式 `@main`。
+- Verification 产品构建并运行通过；Xcode Benchmark scheme 与主 App scheme 构建通过；21 项单元测试通过。

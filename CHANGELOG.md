@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)；候选版本在版本号后使用 `-rcN`。
 
+## 未发布
+
+### 修复
+
+- 将 Verification 与 Benchmark 的入口文件从特殊文件名 `main.swift` 改为普通 Swift 文件名，避免 Xcode 的 Swift Package scheme 将隐式入口和 `@main` 同时编译而报错。
+
 ## [0.2.0-rc5] - 2026-07-24
 
 ### 改进
