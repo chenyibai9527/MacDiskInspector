@@ -5,6 +5,7 @@ private enum ProjectLinks {
     static let repository = URL(
         string: "https://github.com/chenyibai9527/MacDiskInspector"
     )!
+    static let releases = repository.appending(path: "releases")
     static let issues = repository.appending(path: "issues")
     static let license = repository.appending(path: "blob/main/LICENSE")
 }
@@ -62,6 +63,11 @@ struct AboutView: View {
                 )
 
                 HStack(spacing: 10) {
+                    Link(destination: ProjectLinks.releases) {
+                        Label("查看发布版本", systemImage: "shippingbox")
+                    }
+                    .buttonStyle(.bordered)
+
                     Link(destination: ProjectLinks.repository) {
                         Label("查看源代码", systemImage: "arrow.up.right.square")
                     }
@@ -164,6 +170,10 @@ struct SettingsView: View {
                 }
 
                 Section("开源与反馈") {
+                    Link(destination: ProjectLinks.releases) {
+                        Label("查看发布版本与下载", systemImage: "shippingbox")
+                    }
+
                     Link(destination: ProjectLinks.repository) {
                         Label(
                             "查看 GitHub 仓库",

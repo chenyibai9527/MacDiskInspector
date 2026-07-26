@@ -4,6 +4,8 @@ Mac 磁盘扫描助手（英文名：Mac Disk Inspector）是一个原生 macOS�
 
 项目主页：[github.com/chenyibai9527/MacDiskInspector](https://github.com/chenyibai9527/MacDiskInspector)
 
+安装包与版本说明：[GitHub Releases](https://github.com/chenyibai9527/MacDiskInspector/releases)
+
 1. 空间实际分配给了什么；
 2. 为什么这些数据会出现、风险是什么；
 3. 用户可以去哪里验证，并由用户自己决定是否处理。

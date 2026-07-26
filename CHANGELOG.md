@@ -1,8 +1,11 @@
 # 更新日志
 
-本项目遵循 [Semantic Versioning](https://semver.org/)；候选版本在版本号后使用 `-rcN`。
+本项目遵循 [Semantic Versioning](https://semver.org/)；候选版本在版本号后使用
+`-rcN`，公开预览版本使用 `-preview.N`。
 
 ## 未发布
+
+## [0.2.0-preview.1] - 2026-07-26
 
 ### 修复
 
