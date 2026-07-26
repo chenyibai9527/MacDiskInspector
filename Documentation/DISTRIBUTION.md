@@ -115,3 +115,66 @@ export MDI_NOTARY_PROFILE="MacDiskInspector-Notary"
 - 在干净账户上验证 Gatekeeper 首次启动；
 - 测试 macOS 13、14、15 和当前版本；
 - 保留公证日志与构建 tag。
+
+## Release 发布后同步 Cloudflare Pages 官网
+
+`.github/workflows/deploy-website-on-release.yml` 监听 GitHub Release 的
+`published` 事件。正式 Release 和 prerelease 都会触发，因为官网当前使用
+`RELEASE_CHANNEL=preview`，会从公开 Release 中选择最新的 Universal DMG。
+[GitHub Actions 官方文档](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#release)
+也明确建议：需要同时覆盖正式版与预发布版时，应监听 `published`，而不是组合
+`released` 与 `prereleased`。
+
+官网 Cloudflare Pages 项目的生产构建命令必须设置为：
+
+```text
+npm run build:cloudflare
+```
+
+该命令会先通过 GitHub Releases API 更新官网 Release 快照，再构建静态站点。
+
+### 创建 Cloudflare Pages Production Deploy Hook
+
+1. 登录 Cloudflare Dashboard，进入官网对应的 **Workers & Pages** 项目；
+2. 打开 **Settings → Builds**，选择 **Add deploy hook**；
+3. 创建一个指向生产分支的 Deploy Hook，例如命名为
+   `MacDiskInspector GitHub Release`；
+4. 复制 Cloudflare 生成的 Hook URL。不要把 URL 写入源码、Issue、Actions
+   日志或公开文档。
+
+具体界面与安全说明以
+[Cloudflare Pages Deploy Hooks 官方文档](https://developers.cloudflare.com/pages/configuration/deploy-hooks/)
+为准。Deploy Hook URL 无需额外认证即可触发构建，应像密码一样保护；如果怀疑
+泄露，应在 Cloudflare 删除并重新生成。
+
+### 在 GitHub 保存 Deploy Hook
+
+1. 打开 `MacDiskInspector` GitHub 仓库；
+2. 进入 **Settings → Secrets and variables → Actions**；
+3. 在 **Repository secrets** 中创建：
+
+   ```text
+   CF_PAGES_DEPLOY_HOOK
+   ```
+
+4. 值粘贴为 Cloudflare Pages Production Deploy Hook 的完整 URL。
+
+工作流不会回退到硬编码 URL。Secret 缺失、请求网络失败或 Cloudflare 返回非
+2xx 状态时，工作流都会失败，不会误报官网部署已触发。
+
+### 可选的线上版本验证
+
+正式域名确定，并且官网公开提供 `/release.json` 后，可以额外配置：
+
+```text
+WEBSITE_RELEASE_STATUS_URL
+```
+
+它可以保存为 GitHub Actions Repository secret，也可以保存为 Repository
+variable；建议值为官网完整的 HTTPS `/release.json` 地址。不要在域名尚未确定
+时填写占位 URL。
+
+配置后，工作流会在触发 Deploy Hook 后最多轮询五分钟，并要求 JSON 顶层
+`tag` 与刚发布的 GitHub Release tag 完全一致。未配置时，工作流只确认
+Cloudflare 接受了部署请求，并明确记录“未执行线上版本验证”；这不代表官网
+内容已经上线或版本已经核验。

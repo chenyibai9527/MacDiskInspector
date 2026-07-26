@@ -1,0 +1,117 @@
+name: Deploy website after release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-release-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  trigger-production-deploy:
+    name: Trigger Cloudflare Pages production deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_RELEASE_TAG: ${{ github.event.release.tag_name }}
+      WEBSITE_RELEASE_STATUS_URL: >-
+        ${{ secrets.WEBSITE_RELEASE_STATUS_URL || vars.WEBSITE_RELEASE_STATUS_URL }}
+
+    steps:
+      - name: Require the production Deploy Hook
+        env:
+          CF_PAGES_DEPLOY_HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CF_PAGES_DEPLOY_HOOK:-}" ]]; then
+            echo "::error::CF_PAGES_DEPLOY_HOOK is not configured."
+            exit 1
+          fi
+
+      - name: Trigger the Cloudflare Pages production build
+        env:
+          CF_PAGES_DEPLOY_HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="${RUNNER_TEMP}/cloudflare-pages-deploy-response.txt"
+          http_status="$(
+            curl \
+              --fail-with-body \
+              --retry 3 \
+              --retry-all-errors \
+              --connect-timeout 20 \
+              --max-time 60 \
+              --silent \
+              --show-error \
+              --request POST \
+              --output "${response_file}" \
+              --write-out "%{http_code}" \
+              "${CF_PAGES_DEPLOY_HOOK}"
+          )"
+          if [[ ! "${http_status}" =~ ^2[0-9][0-9]$ ]]; then
+            echo "::error::Cloudflare Pages returned a non-2xx response."
+            exit 1
+          fi
+          echo "Cloudflare Pages accepted the production deploy request."
+
+      - name: Verify the published website release
+        if: ${{ env.WEBSITE_RELEASE_STATUS_URL != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status_file="${RUNNER_TEMP}/website-release.json"
+
+          for attempt in {1..30}; do
+            if http_status="$(
+              curl \
+                --fail-with-body \
+                --retry 3 \
+                --retry-all-errors \
+                --connect-timeout 20 \
+                --max-time 30 \
+                --silent \
+                --show-error \
+                --output "${status_file}" \
+                --write-out "%{http_code}" \
+                "${WEBSITE_RELEASE_STATUS_URL}"
+            )" && [[ "${http_status}" =~ ^2[0-9][0-9]$ ]]; then
+              actual_tag="$(
+                python3 -c '
+          import json
+          import sys
+
+          try:
+              with open(sys.argv[1], encoding="utf-8") as source:
+                  value = json.load(source).get("tag", "")
+          except (OSError, json.JSONDecodeError):
+              value = ""
+
+          print(value if isinstance(value, str) else "")
+          ' "${status_file}"
+              )"
+
+              if [[ "${actual_tag}" == "${EXPECTED_RELEASE_TAG}" ]]; then
+                echo "Website release verified: ${EXPECTED_RELEASE_TAG}"
+                exit 0
+              fi
+            fi
+
+            if (( attempt < 30 )); then
+              sleep 10
+            fi
+          done
+
+          echo "::error::The website status endpoint did not report ${EXPECTED_RELEASE_TAG} within five minutes."
+          exit 1
+
+      - name: Record that online verification is not configured
+        if: ${{ env.WEBSITE_RELEASE_STATUS_URL == '' }}
+        shell: bash
+        run: |
+          echo "WEBSITE_RELEASE_STATUS_URL is not configured; the deploy was triggered, but the online release version was not verified."

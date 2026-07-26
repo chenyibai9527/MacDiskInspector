@@ -102,6 +102,11 @@ SECURITY.md                 漏洞报告与安全政策
 
 GitHub Actions 会在每个 PR 上运行单元测试、核心安全验收、Universal App 构建与源码安全不变量检查。社区包工作流只生成供维护者复核的 artifact，不会自动公开发布。
 
+GitHub Release 发布后，独立工作流会通过仓库 Secret
+`CF_PAGES_DEPLOY_HOOK` 触发 Cloudflare Pages 官网的生产构建。配置步骤与可选
+线上版本核验见
+[官网分发与公证](Documentation/DISTRIBUTION.md#release-发布后同步-cloudflare-pages-官网)。
+
 项目使用 [MIT License](LICENSE) 开源。
 
 发现问题可前往 [GitHub Issues](https://github.com/chenyibai9527/MacDiskInspector/issues)；
