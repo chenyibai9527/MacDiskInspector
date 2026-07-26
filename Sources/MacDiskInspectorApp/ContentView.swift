@@ -33,7 +33,6 @@ struct ContentView: View {
             GeometryReader { proxy in
                 ZStack {
                     InspectorBackdrop()
-                        .adaptiveBackgroundExtension()
 
                     selectedPage
                         .frame(
@@ -48,6 +47,8 @@ struct ContentView: View {
                 .clipped()
             }
         }
+        .background(InspectorBackdrop())
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if model.isScanning {

@@ -17,6 +17,7 @@ struct UnifiedWindowChrome: NSViewRepresentable {
             guard let window = view.window else { return }
             window.styleMask.insert(.fullSizeContentView)
             window.titlebarAppearsTransparent = true
+            window.titlebarSeparatorStyle = .none
             window.toolbarStyle = .unified
             window.backgroundColor = .windowBackgroundColor
         }
@@ -63,14 +64,6 @@ extension View {
         modifier(InspectorContentSurfaceModifier(cornerRadius: cornerRadius))
     }
 
-    @ViewBuilder
-    func adaptiveBackgroundExtension() -> some View {
-        if #available(macOS 26.0, *) {
-            backgroundExtensionEffect()
-        } else {
-            self
-        }
-    }
 }
 
 struct InspectorBackdrop: View {
