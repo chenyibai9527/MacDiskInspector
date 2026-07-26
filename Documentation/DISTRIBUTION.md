@@ -22,6 +22,8 @@ build/DerivedData.noindex/Build/Products/Release/Mac 磁盘扫描助手.app
 ```
 
 该脚本会在无需 Developer ID 的情况下进行 ad-hoc 签名，保留 App Sandbox 和“用户选择目录只读” entitlement。它仍不代表 Apple 已验证或已公证。
+构建完成后脚本会从 LaunchServices 注销这份开发产物；`.app` 文件仍保留在上述
+路径供测试和打包使用，但不会作为另一份已安装应用持续出现在 App 启动器中。
 
 ## 没有 Developer ID 时
 

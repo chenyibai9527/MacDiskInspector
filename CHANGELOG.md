@@ -13,6 +13,7 @@
 
 - 新增统一的手动发布工作流，一次完成版本校验、测试、Universal DMG 构建、Release 发布和官网部署验证。
 - GitHub Actions 的检出与 Artifact 上传组件升级到 Node.js 24 版本，移除 Node.js 20 弃用警告。
+- 本地构建完成后自动从 LaunchServices 注销构建产物，避免开发版本与正式安装版同时出现在 App 启动器中。
 
 ## [0.2.3-preview.1] - 2026-07-26
 

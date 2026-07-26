@@ -107,3 +107,11 @@
 - 本地完整生成并只读挂载验证 `0.2.3-preview.2` 测试 DMG，双架构、签名、背景、说明文档及 Finder 布局均通过，未创建或修改任何线上 Release。
 - `0.2.3-preview.2` 统一发布工作流在线运行成功，Release、Cloudflare Pages 部署与官网 `/release.json` 验证全部通过。
 - 根据运行注解将 `actions/upload-artifact` 从 Node.js 20 的 `v4` 升级至 Node.js 24 的 `v7`，并把备用社区打包工作流的 `actions/checkout` 统一升级至 `v6`。
+
+## 2026-07-27 本地重复 App 清理
+
+- 确认“应用程序”中只有一份正式安装版；额外入口来自仍挂载的发布 DMG、工作区构建产物，以及深浅色验收时使用独立 Bundle ID 创建的视觉测试 App。
+- `.noindex` 只能阻止 Spotlight 索引，不能阻止 Xcode 构建末尾主动执行 LaunchServices 注册。
+- 本地构建脚本现在会在签名验证完成后，仅对刚生成的明确 `.app` 路径执行 LaunchServices 注销；产物仍保留用于测试和打包。
+- 清理时发布 DMG 已经被用户或系统推出；两份视觉测试构建已从 LaunchServices 注销并移入废纸篓，正式 `/Applications` 版本保持不动。
+- 修改后的 Release 构建、ad-hoc 签名与双架构验证通过；Xcode 日志显示注册步骤后，脚本的精确注销命令成功返回。
