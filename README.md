@@ -76,7 +76,7 @@ SECURITY.md                 漏洞报告与安全政策
 
 ## 隐私与权限
 
-扫描仅在用户点击“选择目录并扫描”后开始。照片、音乐、Mail、Messages、Safari、日历、通讯录、提醒事项、家庭数据以及其他 App 的 Containers 与 Group Containers 等范围默认跳过。扫描器使用只返回目录项名称的 POSIX 浅层遍历，并在打开子目录或读取其元数据之前应用排除规则，避免 Foundation 在列出父目录时提前触碰受保护子项。用户主动开启后，App 才会在实际扫描到相应位置时交由 macOS 询问权限。被跳过或拒绝的位置会记录为覆盖缺口，不会被推断为 0 B。
+扫描仅在用户点击“选择目录并扫描”后开始。照片、音乐及其位于 `~/Library` 中的系统媒体索引与缓存、Mail、Messages、Safari、日历、通讯录、提醒事项、家庭数据，以及其他 App 的 Containers 与 Group Containers 等范围默认跳过。扫描器使用只返回目录项名称的 POSIX 浅层遍历，并在打开子目录或读取其元数据之前应用排除规则，避免 Foundation 在列出父目录时提前触碰受保护子项。用户主动开启后，App 才会在实际扫描到相应位置时交由 macOS 询问权限。被跳过或拒绝的位置会记录为覆盖缺口，不会被推断为 0 B。
 
 详细边界见 [Documentation/PRODUCT_AND_SAFETY.md](Documentation/PRODUCT_AND_SAFETY.md)。
 

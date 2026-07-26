@@ -24,7 +24,7 @@ com.apple.security.files.user-selected.read-only
 
 macOS 的 TCC、ACL 和 POSIX 权限仍可能阻止访问。失败路径只在本机界面显示。
 
-为避免在扫描个人文件夹或整块磁盘时意外触发敏感权限提示，App 默认跳过桌面、文稿、下载、图片与照片图库、音乐、影片、邮件、信息、Safari、日历、通讯录、提醒事项、家庭数据，以及其他 App 的 `Containers` 和 `Group Containers`。用户可以在“设置 → 受保护目录”中逐项选择是否扫描：
+为避免在扫描个人文件夹或整块磁盘时意外触发敏感权限提示，App 默认跳过桌面、文稿、下载、图片与照片图库、音乐、影片、邮件、信息、Safari、日历、通讯录、提醒事项、家庭数据，以及其他 App 的 `Containers` 和 `Group Containers`。图片与音乐的保护范围同时包含 macOS 放在 `~/Library` 中的照片索引、媒体分析目录和 Apple Music/iTunes 媒体服务缓存；这些位置即使不在 `~/Pictures` 或 `~/Music` 内，也可能触发照片或媒体资料库授权。用户可以在“设置 → 受保护目录”中逐项选择是否扫描：
 
 - 扫描器使用 POSIX `readdir` 只读取父目录中的项目名称，不使用可能预取子项元数据的 Foundation 目录枚举；
 - 扫描器根据项目名称匹配排除规则，命中后不会对该子项调用 `lstat`，也不会打开该子目录；

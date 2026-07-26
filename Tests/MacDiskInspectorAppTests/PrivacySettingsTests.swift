@@ -39,6 +39,12 @@ struct PrivacySettingsTests {
         #expect(protectedPaths.contains("Library/Application Support/AddressBook"))
         #expect(protectedPaths.contains("Library/Reminders"))
         #expect(protectedPaths.contains("Library/HomeKit"))
+        #expect(protectedPaths.contains("Library/Photos"))
+        #expect(protectedPaths.contains("Library/MediaAnalysis"))
+        #expect(protectedPaths.contains("Library/Caches/com.apple.Photos"))
+        #expect(protectedPaths.contains("Library/Application Support/MediaLibrary"))
+        #expect(protectedPaths.contains("Library/Caches/com.apple.Music"))
+        #expect(protectedPaths.contains("Library/Caches/com.apple.itunescloudd"))
     }
 
     @Test("An existing preference does not opt into newly protected app data")
@@ -62,10 +68,17 @@ struct PrivacySettingsTests {
         #expect(loginHome.path.hasPrefix("/"))
         #expect(loginHome.lastPathComponent.isEmpty == false)
 
-        let musicPath = InspectorViewModel.ProtectedDirectory.music
+        let musicPaths = InspectorViewModel.ProtectedDirectory.music
             .urls(homeDirectory: loginHome)
-            .first
-        #expect(musicPath?.path == loginHome.appendingPathComponent("Music").path)
+            .map(\.path)
+        #expect(musicPaths.contains(loginHome.appendingPathComponent("Music").path))
+        #expect(
+            musicPaths.contains(
+                loginHome.appendingPathComponent(
+                    "Library/Caches/com.apple.Music"
+                ).path
+            )
+        )
     }
 
     @Test("Full-volume protection includes the login account")
@@ -90,8 +103,32 @@ struct PrivacySettingsTests {
         let paths = Set(exclusions.map(\.path))
 
         #expect(!paths.contains("/Users/current/Music"))
+        #expect(!paths.contains("/Users/current/Library/Caches/com.apple.Music"))
         #expect(paths.contains("/Users/other/Music"))
+        #expect(paths.contains("/Users/other/Library/Caches/com.apple.Music"))
         #expect(paths.contains("/Users/current/Pictures"))
         #expect(paths.contains("/Users/other/Pictures"))
+    }
+
+    @Test("Rescan keeps media service paths excluded when no opt-in is stored")
+    func rescanConfigurationKeepsMediaServicesPrivate() throws {
+        let suiteName = "MacDiskInspectorTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let model = InspectorViewModel(defaults: defaults)
+        let loginHome = URL(fileURLWithPath: "/Users/current", isDirectory: true)
+        let exclusions = InspectorViewModel.protectedDirectoryExclusions(
+            homeDirectories: [loginHome],
+            loginHomeDirectory: loginHome,
+            allowedForLoginAccount: model.enabledProtectedDirectories
+        )
+        let paths = Set(exclusions.map(\.path))
+
+        #expect(paths.contains("/Users/current/Music"))
+        #expect(paths.contains("/Users/current/Library/Photos"))
+        #expect(paths.contains("/Users/current/Library/MediaAnalysis"))
+        #expect(paths.contains("/Users/current/Library/Caches/com.apple.Music"))
+        #expect(paths.contains("/Users/current/Library/Caches/com.apple.Photos"))
     }
 }

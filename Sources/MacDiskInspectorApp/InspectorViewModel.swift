@@ -29,7 +29,7 @@ final class InspectorViewModel: ObservableObject {
             case .documents: "文稿"
             case .downloads: "下载"
             case .pictures: "图片与照片图库"
-            case .music: "音乐"
+            case .music: "音乐与媒体资料库"
             case .movies: "影片"
             case .mail: "邮件数据"
             case .messages: "信息数据"
@@ -47,8 +47,23 @@ final class InspectorViewModel: ObservableObject {
             case .desktop: ["Desktop"]
             case .documents: ["Documents"]
             case .downloads: ["Downloads"]
-            case .pictures: ["Pictures"]
-            case .music: ["Music"]
+            case .pictures: [
+                "Pictures",
+                "Library/Photos",
+                "Library/MediaAnalysis",
+                "Library/Caches/com.apple.Photos",
+            ]
+            case .music: [
+                "Music",
+                "Documents/iTunes",
+                "Library/Application Support/MediaLibrary",
+                "Library/com.apple.iTunesCloud",
+                "Library/Caches/com.apple.Music",
+                "Library/Caches/com.apple.iTunes",
+                "Library/Caches/com.apple.itunescloudd",
+                "Library/Caches/com.apple.iTunesCloud",
+                "Library/HTTPStorages/com.apple.itunescloudd",
+            ]
             case .movies: ["Movies"]
             case .mail: ["Library/Mail"]
             case .messages: ["Library/Messages"]
