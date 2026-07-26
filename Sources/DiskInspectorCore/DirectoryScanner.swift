@@ -106,28 +106,27 @@ private final class EnumerationIssueCollector {
 }
 
 public final class DirectoryScanner: @unchecked Sendable {
-    typealias DirectoryContentsProvider = @Sendable (URL) throws -> [URL]
+    typealias DirectoryEntryNamesProvider = @Sendable (URL) throws -> [String]
+    typealias FileStatProvider = @Sendable (String) throws -> PortableStat
 
     private let ruleEngine: RuleEngine
-    private let directoryContents: DirectoryContentsProvider
+    private let directoryEntryNames: DirectoryEntryNamesProvider
+    private let fileStat: FileStatProvider
 
     public init(ruleEngine: RuleEngine = RuleEngine()) {
         self.ruleEngine = ruleEngine
-        self.directoryContents = { directoryURL in
-            try FileManager.default.contentsOfDirectory(
-                at: directoryURL,
-                includingPropertiesForKeys: nil,
-                options: [.skipsSubdirectoryDescendants]
-            )
-        }
+        self.directoryEntryNames = { try Self.posixDirectoryEntryNames(at: $0) }
+        self.fileStat = { try Self.fileStat(atPath: $0) }
     }
 
     init(
         ruleEngine: RuleEngine = RuleEngine(),
-        directoryContents: @escaping DirectoryContentsProvider
+        directoryEntryNames: @escaping DirectoryEntryNamesProvider,
+        fileStat: @escaping FileStatProvider = { try DirectoryScanner.fileStat(atPath: $0) }
     ) {
         self.ruleEngine = ruleEngine
-        self.directoryContents = directoryContents
+        self.directoryEntryNames = directoryEntryNames
+        self.fileStat = fileStat
     }
 
     public func scan(
@@ -195,7 +194,7 @@ public final class DirectoryScanner: @unchecked Sendable {
                 isPartial: false
             )
         }
-        let rootStat = try Self.fileStat(atPath: root.path)
+        let rootStat = try fileStat(root.path)
         guard !rootStat.isSymbolicLink else {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
@@ -224,16 +223,16 @@ public final class DirectoryScanner: @unchecked Sendable {
                 break
             }
 
-            let children: [URL]
+            let childNames: [String]
             do {
-                children = try directoryContents(directoryURL)
+                childNames = try directoryEntryNames(directoryURL)
             } catch {
                 issueCollector.record(error: error, url: directoryURL)
                 continue
             }
 
             var childDirectories: [URL] = []
-            for itemURL in children {
+            for childName in childNames {
                 if Task.isCancelled {
                     guard configuration.returnPartialResultsOnCancellation else {
                         throw CancellationError()
@@ -242,6 +241,15 @@ public final class DirectoryScanner: @unchecked Sendable {
                     break directoryLoop
                 }
                 entriesVisited += 1
+
+                // Constructing a URL from a directory entry name is lexical and
+                // does not query the child. This matters for TCC-protected paths:
+                // Foundation directory listing APIs can prefetch child metadata
+                // and cause a permission prompt before exclusions are evaluated.
+                let itemURL = directoryURL.appendingPathComponent(
+                    childName,
+                    isDirectory: false
+                )
 
                 // Apply privacy exclusions before lstat or directory enumeration.
                 // Merely touching a TCC-protected directory can trigger a system
@@ -261,7 +269,7 @@ public final class DirectoryScanner: @unchecked Sendable {
 
                 let stat: PortableStat
                 do {
-                    stat = try Self.fileStat(atPath: itemURL.path)
+                    stat = try fileStat(itemURL.path)
                 } catch {
                     issueCollector.record(error: error, url: itemURL)
                     continue
@@ -447,7 +455,7 @@ public final class DirectoryScanner: @unchecked Sendable {
         }
     }
 
-    private struct PortableStat {
+    struct PortableStat {
         let device: UInt64
         let inode: UInt64
         let linkCount: UInt64
@@ -461,7 +469,7 @@ public final class DirectoryScanner: @unchecked Sendable {
         var isRegularFile: Bool { mode & S_IFMT == S_IFREG }
     }
 
-    private static func fileStat(atPath path: String) throws -> PortableStat {
+    static func fileStat(atPath path: String) throws -> PortableStat {
         var info = stat()
         let result = path.withCString { lstat($0, &info) }
         guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
@@ -476,5 +484,40 @@ public final class DirectoryScanner: @unchecked Sendable {
             modifiedAt: Date(timeIntervalSince1970: modified),
             mode: info.st_mode
         )
+    }
+
+    /// Reads only directory entry names. In particular, this deliberately avoids
+    /// `FileManager.contentsOfDirectory`, which may ask the system for child
+    /// metadata before the scanner has a chance to apply privacy exclusions.
+    static func posixDirectoryEntryNames(at directoryURL: URL) throws -> [String] {
+        guard let directory = opendir(directoryURL.path) else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        defer { closedir(directory) }
+
+        var names: [String] = []
+        while true {
+            errno = 0
+            guard let entry = readdir(directory) else {
+                if errno != 0 {
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+                break
+            }
+
+            var nameBuffer = entry.pointee.d_name
+            let nameBufferSize = MemoryLayout.size(ofValue: nameBuffer)
+            let name = withUnsafePointer(to: &nameBuffer) { pointer in
+                pointer.withMemoryRebound(
+                    to: CChar.self,
+                    capacity: nameBufferSize
+                ) {
+                    String(cString: $0)
+                }
+            }
+            guard name != ".", name != ".." else { continue }
+            names.append(name)
+        }
+        return names
     }
 }

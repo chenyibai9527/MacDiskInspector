@@ -22,6 +22,25 @@ struct PrivacySettingsTests {
         #expect(paths == ["Library/Containers", "Library/Group Containers"])
     }
 
+    @Test("System privacy databases are excluded by default")
+    func systemPrivacyDatabaseDefaults() throws {
+        let suiteName = "MacDiskInspectorTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let model = InspectorViewModel(defaults: defaults)
+        let protectedPaths = Set(
+            InspectorViewModel.ProtectedDirectory.allCases
+                .filter { !model.isProtectedDirectoryEnabled($0) }
+                .flatMap(\.relativePaths)
+        )
+
+        #expect(protectedPaths.contains("Library/Calendars"))
+        #expect(protectedPaths.contains("Library/Application Support/AddressBook"))
+        #expect(protectedPaths.contains("Library/Reminders"))
+        #expect(protectedPaths.contains("Library/HomeKit"))
+    }
+
     @Test("An existing preference does not opt into newly protected app data")
     func existingPreferencesRemainPrivate() throws {
         let suiteName = "MacDiskInspectorTests.\(UUID().uuidString)"

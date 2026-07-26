@@ -15,6 +15,10 @@ final class InspectorViewModel: ObservableObject {
         case mail
         case messages
         case safari
+        case calendars
+        case contacts
+        case reminders
+        case homeData
         case otherAppData
 
         var id: String { rawValue }
@@ -30,6 +34,10 @@ final class InspectorViewModel: ObservableObject {
             case .mail: "邮件数据"
             case .messages: "信息数据"
             case .safari: "Safari 数据"
+            case .calendars: "日历数据"
+            case .contacts: "通讯录数据"
+            case .reminders: "提醒事项数据"
+            case .homeData: "家庭数据"
             case .otherAppData: "其他 App 数据"
             }
         }
@@ -45,6 +53,10 @@ final class InspectorViewModel: ObservableObject {
             case .mail: ["Library/Mail"]
             case .messages: ["Library/Messages"]
             case .safari: ["Library/Safari"]
+            case .calendars: ["Library/Calendars"]
+            case .contacts: ["Library/Application Support/AddressBook"]
+            case .reminders: ["Library/Reminders"]
+            case .homeData: ["Library/HomeKit"]
             case .otherAppData: ["Library/Containers", "Library/Group Containers"]
             }
         }
@@ -64,6 +76,10 @@ final class InspectorViewModel: ObservableObject {
             case .mail: "envelope"
             case .messages: "message"
             case .safari: "safari"
+            case .calendars: "calendar"
+            case .contacts: "person.crop.circle"
+            case .reminders: "checklist"
+            case .homeData: "house"
             case .otherAppData: "app.badge"
             }
         }

@@ -19,25 +19,35 @@ private actor ProgressLatch {
     }
 }
 
-private final class DirectoryReadRecorder: @unchecked Sendable {
+private final class DirectoryAccessRecorder: @unchecked Sendable {
     private let lock = NSLock()
-    private var recordedPaths = Set<String>()
+    private var openedDirectories = Set<String>()
+    private var metadataPaths = Set<String>()
 
-    func contents(of directoryURL: URL) throws -> [URL] {
+    func entryNames(of directoryURL: URL) throws -> [String] {
         lock.lock()
-        recordedPaths.insert(directoryURL.standardizedFileURL.path)
+        openedDirectories.insert(directoryURL.standardizedFileURL.path)
         lock.unlock()
-        return try FileManager.default.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsSubdirectoryDescendants]
-        )
+        return try DirectoryScanner.posixDirectoryEntryNames(at: directoryURL)
     }
 
-    func contains(_ url: URL) -> Bool {
+    func stat(_ path: String) throws -> DirectoryScanner.PortableStat {
+        lock.lock()
+        metadataPaths.insert(URL(fileURLWithPath: path).standardizedFileURL.path)
+        lock.unlock()
+        return try DirectoryScanner.fileStat(atPath: path)
+    }
+
+    func opened(_ url: URL) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return recordedPaths.contains(url.standardizedFileURL.path)
+        return openedDirectories.contains(url.standardizedFileURL.path)
+    }
+
+    func readMetadata(of url: URL) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return metadataPaths.contains(url.standardizedFileURL.path)
     }
 }
 
@@ -67,10 +77,15 @@ struct DirectoryScannerTests {
                 to: protected.appendingPathComponent("library.musicdb")
             )
 
-            let recorder = DirectoryReadRecorder()
-            let scanner = DirectoryScanner { directoryURL in
-                try recorder.contents(of: directoryURL)
-            }
+            let recorder = DirectoryAccessRecorder()
+            let scanner = DirectoryScanner(
+                directoryEntryNames: { directoryURL in
+                    try recorder.entryNames(of: directoryURL)
+                },
+                fileStat: { path in
+                    try recorder.stat(path)
+                }
+            )
             let report = try await scanner.scan(
                 rootURL: root,
                 configuration: ScanConfiguration(
@@ -83,7 +98,8 @@ struct DirectoryScannerTests {
                 )
             )
 
-            #expect(!recorder.contains(protected))
+            #expect(!recorder.opened(protected))
+            #expect(!recorder.readMetadata(of: protected))
             #expect(report.uniqueFiles == 0)
             #expect(report.protectedDirectorySkippedCount == 1)
         }

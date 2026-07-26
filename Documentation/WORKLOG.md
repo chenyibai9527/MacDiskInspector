@@ -56,3 +56,13 @@
 - 复现 Xcode 构建 Swift Package 辅助可执行 target 时的 `@main` 与 `main.swift` 隐式入口冲突。
 - 将 `DiskInspectorCoreVerification/main.swift` 和 `DiskInspectorBenchmark/main.swift` 改为与入口类型同名的普通 Swift 文件，继续保留显式 `@main`。
 - Verification 产品构建并运行通过；Xcode Benchmark scheme 与主 App scheme 构建通过；21 项单元测试通过。
+
+## 2026-07-26 全盘扫描隐私提示修复
+
+- 从本机 TCC 日志确认全盘扫描依次触发了 Calendar、Photos 和 Media Library 授权判断；已安装版本确认为 `0.2.1 (20260726134226)`，排除“装错旧版本”。
+- 根因是 Foundation 浅层目录 API 仍可能在返回父目录内容时预取受保护子项元数据；扫描器改为 POSIX `readdir`，只读取目录项名称。
+- 排除规则现在先于子项 `lstat` 和子目录 `opendir` 执行；单元测试分别记录目录打开与元数据读取，确认命中的 `Music` 路径两者都不会发生。
+- 默认保护清单补充日历、通讯录、提醒事项和家庭数据，避免全盘扫描继续触发遗漏的系统隐私类别。
+- 38 项单元测试、源码安全检查和 Release 性能基准通过；100,000 文件夹具约 33.46 秒，峰值 RSS 约 131.9 MiB。
+- Universal Release `.app` 构建通过，版本 `0.2.2`，构建号 `20260726155320`，架构为 `arm64 + x86_64`。
+- `0.2.2-preview.1` DMG 已生成并完成只读挂载、签名、架构、背景与文档校验；未扫描用户文件，未执行任何清理操作。
