@@ -60,7 +60,7 @@ private struct MutableMeasurement {
     }
 }
 
-private final class EnumerationIssueCollector: NSObject, FileManagerDelegate {
+private final class EnumerationIssueCollector {
     private let limit: Int
     var issues: [ScanIssue] = []
     private(set) var totalIssueCount = 0
@@ -73,16 +73,6 @@ private final class EnumerationIssueCollector: NSObject, FileManagerDelegate {
 
     var omittedIssueCount: Int {
         max(0, totalIssueCount - issues.count)
-    }
-
-    func fileManager(
-        _ fileManager: FileManager,
-        shouldProceedAfterError error: Error,
-        copyingItemAt srcURL: URL,
-        to dstURL: URL
-    ) -> Bool {
-        record(error: error, url: srcURL)
-        return true
     }
 
     func record(error: Error, url: URL) {
@@ -116,10 +106,28 @@ private final class EnumerationIssueCollector: NSObject, FileManagerDelegate {
 }
 
 public final class DirectoryScanner: @unchecked Sendable {
+    typealias DirectoryContentsProvider = @Sendable (URL) throws -> [URL]
+
     private let ruleEngine: RuleEngine
+    private let directoryContents: DirectoryContentsProvider
 
     public init(ruleEngine: RuleEngine = RuleEngine()) {
         self.ruleEngine = ruleEngine
+        self.directoryContents = { directoryURL in
+            try FileManager.default.contentsOfDirectory(
+                at: directoryURL,
+                includingPropertiesForKeys: nil,
+                options: [.skipsSubdirectoryDescendants]
+            )
+        }
+    }
+
+    init(
+        ruleEngine: RuleEngine = RuleEngine(),
+        directoryContents: @escaping DirectoryContentsProvider
+    ) {
+        self.ruleEngine = ruleEngine
+        self.directoryContents = directoryContents
     }
 
     public func scan(
@@ -195,23 +203,11 @@ public final class DirectoryScanner: @unchecked Sendable {
             throw CocoaError(.fileReadNoSuchFile)
         }
 
-        let manager = FileManager()
         let issueCollector = EnumerationIssueCollector(limit: configuration.maxRecordedIssues)
-        manager.delegate = issueCollector
-        guard let enumerator = manager.enumerator(
-            at: root,
-            includingPropertiesForKeys: nil,
-            options: [],
-            errorHandler: { url, error in
-                issueCollector.record(error: error, url: url)
-                return true
-            }
-        ) else {
-            throw CocoaError(.fileReadUnknown)
-        }
 
         var measurements: [String: MutableMeasurement] = [root.path: MutableMeasurement()]
         var seenHardLinks = Set<HardLinkIdentity>()
+        var pendingDirectories = [root]
         var entriesVisited = 0
         var uniqueFiles = 0
         var duplicateHardLinksSkipped = 0
@@ -219,7 +215,7 @@ public final class DirectoryScanner: @unchecked Sendable {
         var totalLogical: Int64 = 0
         var wasCancelled = false
 
-        for case let itemURL as URL in enumerator {
+        directoryLoop: while let directoryURL = pendingDirectories.popLast() {
             if Task.isCancelled {
                 guard configuration.returnPartialResultsOnCancellation else {
                     throw CancellationError()
@@ -227,95 +223,122 @@ public final class DirectoryScanner: @unchecked Sendable {
                 wasCancelled = true
                 break
             }
-            entriesVisited += 1
 
-            if let exclusion = excludedDirectories.first(where: {
-                Self.path(Self.comparisonPath(itemURL.path), isEqualToOrInside: $0.path)
-            }) {
-                enumerator.skipDescendants()
-                issueCollector.append(
-                    ScanIssue(
-                        path: exclusion.path,
-                        kind: .protectedDirectorySkipped,
-                        message: exclusion.reason
-                    )
-                )
-                continue
-            }
-
-            let stat: PortableStat
+            let children: [URL]
             do {
-                stat = try Self.fileStat(atPath: itemURL.path)
+                children = try directoryContents(directoryURL)
             } catch {
-                issueCollector.record(error: error, url: itemURL)
+                issueCollector.record(error: error, url: directoryURL)
                 continue
             }
 
-            if stat.isSymbolicLink {
-                issueCollector.append(
-                    ScanIssue(
-                        path: itemURL.path,
-                        kind: .symbolicLinkSkipped,
-                        message: "为避免越界和循环，扫描器不会跟随符号链接。"
-                    )
-                )
-                continue
-            }
-
-            if configuration.stayOnSelectedVolume,
-               stat.device != rootStat.device {
-                if stat.isDirectory {
-                    enumerator.skipDescendants()
+            var childDirectories: [URL] = []
+            for itemURL in children {
+                if Task.isCancelled {
+                    guard configuration.returnPartialResultsOnCancellation else {
+                        throw CancellationError()
+                    }
+                    wasCancelled = true
+                    break directoryLoop
                 }
-                issueCollector.append(
-                    ScanIssue(
-                        path: itemURL.path,
-                        kind: .differentVolumeSkipped,
-                        message: "该项目位于另一个卷，已跳过。"
+                entriesVisited += 1
+
+                // Apply privacy exclusions before lstat or directory enumeration.
+                // Merely touching a TCC-protected directory can trigger a system
+                // permission prompt, even when its descendants are later skipped.
+                if let exclusion = excludedDirectories.first(where: {
+                    Self.path(Self.comparisonPath(itemURL.path), isEqualToOrInside: $0.path)
+                }) {
+                    issueCollector.append(
+                        ScanIssue(
+                            path: exclusion.path,
+                            kind: .protectedDirectorySkipped,
+                            message: exclusion.reason
+                        )
                     )
-                )
-                continue
-            }
-
-            guard stat.isRegularFile else { continue }
-
-            if configuration.deduplicateHardLinks && stat.linkCount > 1 {
-                let identity = HardLinkIdentity(device: stat.device, inode: stat.inode)
-                guard seenHardLinks.insert(identity).inserted else {
-                    duplicateHardLinksSkipped += 1
                     continue
                 }
-            }
 
-            let allocated = stat.allocatedBytes
-            let logical = stat.logicalBytes
-            uniqueFiles += 1
-            totalAllocated += allocated
-            totalLogical += logical
+                let stat: PortableStat
+                do {
+                    stat = try Self.fileStat(atPath: itemURL.path)
+                } catch {
+                    issueCollector.record(error: error, url: itemURL)
+                    continue
+                }
 
-            for aggregatePath in aggregatePaths(
-                fileURL: itemURL,
-                rootURL: root,
-                depth: configuration.aggregationDepth
-            ) {
-                var measurement = measurements[aggregatePath, default: MutableMeasurement()]
-                measurement.add(
-                    allocated: allocated,
-                    logical: logical,
-                    modified: stat.modifiedAt
-                )
-                measurements[aggregatePath] = measurement
-            }
-
-            if entriesVisited.isMultiple(of: configuration.progressInterval) {
-                progress(
-                    ScanProgress(
-                        currentPath: itemURL.path,
-                        entriesVisited: entriesVisited,
-                        allocatedBytesMeasured: totalAllocated
+                if stat.isSymbolicLink {
+                    issueCollector.append(
+                        ScanIssue(
+                            path: itemURL.path,
+                            kind: .symbolicLinkSkipped,
+                            message: "为避免越界和循环，扫描器不会跟随符号链接。"
+                        )
                     )
-                )
+                    continue
+                }
+
+                if configuration.stayOnSelectedVolume,
+                   stat.device != rootStat.device {
+                    issueCollector.append(
+                        ScanIssue(
+                            path: itemURL.path,
+                            kind: .differentVolumeSkipped,
+                            message: "该项目位于另一个卷，已跳过。"
+                        )
+                    )
+                    continue
+                }
+
+                if stat.isDirectory {
+                    childDirectories.append(itemURL)
+                    continue
+                }
+
+                guard stat.isRegularFile else { continue }
+
+                if configuration.deduplicateHardLinks && stat.linkCount > 1 {
+                    let identity = HardLinkIdentity(device: stat.device, inode: stat.inode)
+                    guard seenHardLinks.insert(identity).inserted else {
+                        duplicateHardLinksSkipped += 1
+                        continue
+                    }
+                }
+
+                let allocated = stat.allocatedBytes
+                let logical = stat.logicalBytes
+                uniqueFiles += 1
+                totalAllocated += allocated
+                totalLogical += logical
+
+                for aggregatePath in aggregatePaths(
+                    fileURL: itemURL,
+                    rootURL: root,
+                    depth: configuration.aggregationDepth
+                ) {
+                    var measurement = measurements[aggregatePath, default: MutableMeasurement()]
+                    measurement.add(
+                        allocated: allocated,
+                        logical: logical,
+                        modified: stat.modifiedAt
+                    )
+                    measurements[aggregatePath] = measurement
+                }
+
+                if entriesVisited.isMultiple(of: configuration.progressInterval) {
+                    progress(
+                        ScanProgress(
+                            currentPath: itemURL.path,
+                            entriesVisited: entriesVisited,
+                            allocatedBytesMeasured: totalAllocated
+                        )
+                    )
+                }
             }
+
+            // A stack keeps memory bounded while reversed insertion preserves the
+            // shallow listing order for predictable progress reporting.
+            pendingDirectories.append(contentsOf: childDirectories.reversed())
         }
 
         let findings = measurements

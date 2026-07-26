@@ -1,4 +1,4 @@
-# 0.2.0 RC quality gate
+# 0.2.x preview quality gate
 
 ## Automated
 
@@ -9,6 +9,7 @@
 - Benchmark measures the requested unique-file count exactly.
 - Deep cache fixture produces at most five aggregate findings.
 - Issue details remain bounded while total issue count remains accurate.
+- An excluded protected directory is never passed to the directory-content reader.
 
 ## Performance
 

@@ -19,6 +19,28 @@ private actor ProgressLatch {
     }
 }
 
+private final class DirectoryReadRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedPaths = Set<String>()
+
+    func contents(of directoryURL: URL) throws -> [URL] {
+        lock.lock()
+        recordedPaths.insert(directoryURL.standardizedFileURL.path)
+        lock.unlock()
+        return try FileManager.default.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsSubdirectoryDescendants]
+        )
+    }
+
+    func contains(_ url: URL) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedPaths.contains(url.standardizedFileURL.path)
+    }
+}
+
 @Suite("Read-only directory scanner", .serialized)
 struct DirectoryScannerTests {
     @Test("Uses allocated size and aggregates directories")
@@ -33,6 +55,37 @@ struct DirectoryScannerTests {
             #expect(report.totalAllocatedBytes > 0)
             #expect(report.totalLogicalBytes == 8192)
             #expect(report.findings.contains { $0.ruleIdentifier == "npm.cache" })
+        }
+    }
+
+    @Test("Rejects a protected directory before asking for its contents")
+    func protectedDirectoryIsNeverOpened() async throws {
+        try await withFixture { root in
+            let protected = root.appendingPathComponent("Music", isDirectory: true)
+            try FileManager.default.createDirectory(at: protected, withIntermediateDirectories: true)
+            try Data(repeating: 7, count: 4_096).write(
+                to: protected.appendingPathComponent("library.musicdb")
+            )
+
+            let recorder = DirectoryReadRecorder()
+            let scanner = DirectoryScanner { directoryURL in
+                try recorder.contents(of: directoryURL)
+            }
+            let report = try await scanner.scan(
+                rootURL: root,
+                configuration: ScanConfiguration(
+                    excludedDirectories: [
+                        ScanExcludedDirectory(
+                            path: protected.path,
+                            reason: "测试：音乐目录必须在打开前跳过。"
+                        )
+                    ]
+                )
+            )
+
+            #expect(!recorder.contains(protected))
+            #expect(report.uniqueFiles == 0)
+            #expect(report.protectedDirectorySkippedCount == 1)
         }
     }
 

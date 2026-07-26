@@ -76,7 +76,7 @@ SECURITY.md                 漏洞报告与安全政策
 
 ## 隐私与权限
 
-扫描仅在用户点击“选择目录并扫描”后开始。Mail、Messages、Safari、其他 App 的 Containers 与 Group Containers 等范围默认跳过；用户主动开启后，App 才会在实际扫描到相应位置时交由 macOS 询问权限。被跳过或拒绝的位置会记录为覆盖缺口，不会被推断为 0 B。
+扫描仅在用户点击“选择目录并扫描”后开始。Mail、Messages、Safari、其他 App 的 Containers 与 Group Containers 等范围默认跳过；扫描器会在打开子目录或读取其元数据之前应用排除规则。用户主动开启后，App 才会在实际扫描到相应位置时交由 macOS 询问权限。被跳过或拒绝的位置会记录为覆盖缺口，不会被推断为 0 B。
 
 详细边界见 [Documentation/PRODUCT_AND_SAFETY.md](Documentation/PRODUCT_AND_SAFETY.md)。
 

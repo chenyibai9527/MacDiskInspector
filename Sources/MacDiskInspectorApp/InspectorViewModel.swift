@@ -260,17 +260,15 @@ final class InspectorViewModel: ObservableObject {
 
         let fullVolume = isVolumeRoot(url)
         let allowedProtectedDirectories = enabledProtectedDirectories.union(temporarilyAllowed)
-        let homeDirectory = Self.loginHomeDirectory()
-        let excludedDirectories = ProtectedDirectory.allCases
-            .filter { !allowedProtectedDirectories.contains($0) }
-            .flatMap { directory in
-                directory.urls(homeDirectory: homeDirectory).map { url in
-                    ScanExcludedDirectory(
-                        path: url.path,
-                        reason: "为避免意外触发敏感权限，“\(directory.title)”已按你的设置跳过。可在“设置 > 受保护目录”中选择是否扫描。"
-                    )
-                }
-            }
+        let loginHomeDirectory = Self.loginHomeDirectory()
+        let homeDirectories = fullVolume
+            ? Self.localUserHomeDirectories()
+            : [loginHomeDirectory]
+        let excludedDirectories = Self.protectedDirectoryExclusions(
+            homeDirectories: homeDirectories,
+            loginHomeDirectory: loginHomeDirectory,
+            allowedForLoginAccount: allowedProtectedDirectories
+        )
         let configuration = ScanConfiguration(
             aggregationDepth: fullVolume ? 2 : 3,
             stayOnSelectedVolume: true,
@@ -572,5 +570,46 @@ final class InspectorViewModel: ObservableObject {
             .standardizedFileURL
         }
         return FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+    }
+
+    nonisolated static func localUserHomeDirectories() -> [URL] {
+        var paths = Set([loginHomeDirectory().standardizedFileURL.path])
+
+        setpwent()
+        defer { endpwent() }
+        while let record = getpwent(), let homePath = record.pointee.pw_dir {
+            let path = URL(
+                fileURLWithPath: String(cString: homePath),
+                isDirectory: true
+            ).standardizedFileURL.path
+            if path.hasPrefix("/Users/"), path != "/Users/Shared" {
+                paths.insert(path)
+            }
+        }
+
+        return paths.sorted().map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+        }
+    }
+
+    nonisolated static func protectedDirectoryExclusions(
+        homeDirectories: [URL],
+        loginHomeDirectory: URL,
+        allowedForLoginAccount: Set<ProtectedDirectory>
+    ) -> [ScanExcludedDirectory] {
+        let loginPath = loginHomeDirectory.standardizedFileURL.path
+        return homeDirectories.flatMap { homeDirectory in
+            let isLoginAccount = homeDirectory.standardizedFileURL.path == loginPath
+            return ProtectedDirectory.allCases
+                .filter { !isLoginAccount || !allowedForLoginAccount.contains($0) }
+                .flatMap { directory in
+                    directory.urls(homeDirectory: homeDirectory).map { url in
+                        let reason = isLoginAccount
+                            ? "为避免意外触发敏感权限，“\(directory.title)”已按你的设置跳过。可在“设置 > 受保护目录”中选择是否扫描。"
+                            : "为避免越过其他用户的隐私边界，已跳过该账户的“\(directory.title)”。"
+                        return ScanExcludedDirectory(path: url.path, reason: reason)
+                    }
+                }
+        }
     }
 }

@@ -48,4 +48,31 @@ struct PrivacySettingsTests {
             .first
         #expect(musicPath?.path == loginHome.appendingPathComponent("Music").path)
     }
+
+    @Test("Full-volume protection includes the login account")
+    func localHomesIncludeLoginAccount() {
+        let loginHome = InspectorViewModel.loginHomeDirectory().standardizedFileURL.path
+        let localHomes = InspectorViewModel.localUserHomeDirectories()
+            .map(\.standardizedFileURL.path)
+
+        #expect(localHomes.contains(loginHome))
+        #expect(localHomes.allSatisfy { $0.hasPrefix("/Users/") })
+    }
+
+    @Test("Protected-directory opt-ins never apply to other accounts")
+    func optInsAreScopedToLoginAccount() {
+        let loginHome = URL(fileURLWithPath: "/Users/current", isDirectory: true)
+        let otherHome = URL(fileURLWithPath: "/Users/other", isDirectory: true)
+        let exclusions = InspectorViewModel.protectedDirectoryExclusions(
+            homeDirectories: [loginHome, otherHome],
+            loginHomeDirectory: loginHome,
+            allowedForLoginAccount: [.music]
+        )
+        let paths = Set(exclusions.map(\.path))
+
+        #expect(!paths.contains("/Users/current/Music"))
+        #expect(paths.contains("/Users/other/Music"))
+        #expect(paths.contains("/Users/current/Pictures"))
+        #expect(paths.contains("/Users/other/Pictures"))
+    }
 }
