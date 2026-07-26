@@ -35,7 +35,7 @@ jobs:
       - name: Verify universal architectures
         run: |
           lipo \
-            build/DerivedData/Build/Products/Release/MacDiskInspector.app/Contents/MacOS/MacDiskInspector \
+            "build/DerivedData/Build/Products/Release/Mac 磁盘扫描助手.app/Contents/MacOS/MacDiskInspector" \
             -verify_arch arm64 x86_64
 
       - name: Check source safety invariants
