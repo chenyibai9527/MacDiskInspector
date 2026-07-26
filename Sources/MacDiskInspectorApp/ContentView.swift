@@ -96,8 +96,6 @@ struct ContentView: View {
                 }
             }
         }
-        .toolbarBackground(Color(nsColor: .windowBackgroundColor), for: .windowToolbar)
-        .toolbarBackground(.visible, for: .windowToolbar)
         .background {
             UnifiedWindowChrome()
         }

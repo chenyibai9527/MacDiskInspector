@@ -15,6 +15,7 @@ struct UnifiedWindowChrome: NSViewRepresentable {
     private func configureWindow(for view: NSView) {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
+            window.styleMask.insert(.fullSizeContentView)
             window.titlebarAppearsTransparent = true
             window.toolbarStyle = .unified
             window.backgroundColor = .windowBackgroundColor
@@ -73,64 +74,8 @@ extension View {
 }
 
 struct InspectorBackdrop: View {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        ZStack {
-            Color(nsColor: .windowBackgroundColor)
-
-            if !reduceTransparency && colorScheme == .light {
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.08),
-                        Color.clear,
-                        Color.black.opacity(0.01)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-
-            if !reduceTransparency && colorScheme == .light {
-                GeometryReader { proxy in
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color(red: 0.29, green: 0.63, blue: 0.53)
-                                        .opacity(0.075),
-                                    .clear
-                                ],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: min(proxy.size.width, proxy.size.height) * 0.48
-                            )
-                        )
-                        .frame(width: proxy.size.width * 0.72, height: proxy.size.width * 0.72)
-                        .offset(x: proxy.size.width * 0.5, y: -proxy.size.height * 0.34)
-                        .blur(radius: 44)
-
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color(red: 0.84, green: 0.55, blue: 0.25)
-                                        .opacity(0.055),
-                                    .clear
-                                ],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: min(proxy.size.width, proxy.size.height) * 0.42
-                            )
-                        )
-                        .frame(width: proxy.size.width * 0.58, height: proxy.size.width * 0.58)
-                        .offset(x: -proxy.size.width * 0.2, y: proxy.size.height * 0.48)
-                        .blur(radius: 52)
-                }
-                .allowsHitTesting(false)
-            }
-        }
+        Color(nsColor: .windowBackgroundColor)
         .ignoresSafeArea()
     }
 }
