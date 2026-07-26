@@ -9,6 +9,7 @@ MDI_RELEASE_ROOT="$MDI_PROJECT_ROOT/build/release"
 MDI_ARCHIVE_PATH="$MDI_RELEASE_ROOT/MacDiskInspector.xcarchive"
 MDI_EXPORT_PATH="$MDI_RELEASE_ROOT/export"
 MDI_ZIP_PATH="$MDI_RELEASE_ROOT/MacDiskInspector.zip"
+MDI_APP_PATH="$MDI_EXPORT_PATH/Mac 磁盘扫描助手.app"
 
 mkdir -p "$MDI_RELEASE_ROOT"
 
@@ -28,7 +29,7 @@ xcodebuild \
   -exportOptionsPlist "$MDI_PROJECT_ROOT/App/ExportOptions.plist"
 
 ditto -c -k --keepParent \
-  "$MDI_EXPORT_PATH/MacDiskInspector.app" \
+  "$MDI_APP_PATH" \
   "$MDI_ZIP_PATH"
 
 xcrun notarytool submit \
@@ -36,9 +37,9 @@ xcrun notarytool submit \
   --keychain-profile "$MDI_NOTARY_PROFILE" \
   --wait
 
-xcrun stapler staple "$MDI_EXPORT_PATH/MacDiskInspector.app"
-codesign --verify --deep --strict --verbose=2 "$MDI_EXPORT_PATH/MacDiskInspector.app"
-spctl --assess --type execute --verbose=4 "$MDI_EXPORT_PATH/MacDiskInspector.app"
+xcrun stapler staple "$MDI_APP_PATH"
+codesign --verify --deep --strict --verbose=2 "$MDI_APP_PATH"
+spctl --assess --type execute --verbose=4 "$MDI_APP_PATH"
 
 print "Notarized app:"
-print "$MDI_EXPORT_PATH/MacDiskInspector.app"
+print "$MDI_APP_PATH"

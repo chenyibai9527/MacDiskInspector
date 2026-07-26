@@ -113,10 +113,11 @@ public struct DirectoryMeasurement: Hashable, Sendable {
 
 public enum ScanIssueKind: String, Codable, Sendable {
     case permissionDenied = "无权限"
+    case protectedDirectorySkipped = "按设置跳过"
     case symbolicLinkSkipped = "已跳过符号链接"
     case differentVolumeSkipped = "已跳过其他卷"
     case unreadableMetadata = "无法读取元数据"
-    case enumerationFailed = "枚举失败"
+    case enumerationFailed = "目录读取失败"
 }
 
 public struct ScanIssue: Identifiable, Hashable, Codable, Sendable {
@@ -153,15 +154,17 @@ public struct ScanReport: Sendable {
     public let issues: [ScanIssue]
     public let totalIssueCount: Int
     public let inaccessibleIssueCount: Int
+    public let protectedDirectorySkippedCount: Int
     public let omittedIssueCount: Int
     public let entriesVisited: Int
     public let uniqueFiles: Int
     public let duplicateHardLinksSkipped: Int
     public let totalAllocatedBytes: Int64
     public let totalLogicalBytes: Int64
+    public let isPartial: Bool
 
     public var hasCoverageGaps: Bool {
-        inaccessibleIssueCount > 0
+        isPartial || inaccessibleIssueCount > 0 || protectedDirectorySkippedCount > 0
     }
 }
 

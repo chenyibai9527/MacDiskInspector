@@ -2,7 +2,7 @@
 
 ## 产品承诺
 
-Mac Disk Inspector 提供证据、解释和可验证建议，最终决策始终属于用户。默认行为是只读诊断，不以“可释放空间”制造紧迫感。
+Mac 磁盘扫描助手提供证据、解释和可验证建议，最终决策始终属于用户。默认行为是只读诊断，不以“可释放空间”制造紧迫感。
 
 ## 分类模型
 
@@ -45,6 +45,12 @@ Mac Disk Inspector 提供证据、解释和可验证建议，最终决策始终�
 - Cursor `state.vscdb` 与 `.backup`：应用状态数据，不视为普通缓存。
 - Chrome `OnDeviceModel`：可再获取但必须由 Chrome 上下文确认。
 - Antigravity `browser_recordings`：标记异常数据；建议先核对录制任务和日期。
+- `Library`、`Application Support`、`Containers`：解释其结构用途，但不把整个目录估算为可释放空间。
+- Xcode DerivedData：可重新生成；Archives：用户发布资产，高风险；Simulator：应用内管理。
+- Docker、Homebrew、Node.js 版本管理器和 Android SDK：由来源工具管理，不提供通用删除命令。
+- Chrome、Edge、Firefox、Safari：浏览器资料属于用户数据，不等同于缓存。
+- Adobe、Figma、视频制作目录与媒体资料库包：区分可重建缓存和项目/素材数据。
+- CloudStorage 与 Mobile Documents：可能触发跨设备同步，不作为缓存处理。
 
 ## 覆盖状态
 

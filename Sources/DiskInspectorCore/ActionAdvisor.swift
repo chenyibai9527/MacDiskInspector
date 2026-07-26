@@ -98,8 +98,16 @@ public struct ActionAdvisor: Sendable {
     private func bundleIdentifier(for ruleIdentifier: String) -> String? {
         switch ruleIdentifier {
         case "wechat.container": "com.tencent.xinWeChat"
-        case "chrome.on-device-model": "com.google.Chrome"
-        case "cursor.state-database": "com.todesktop.230313mzl4w4u92"
+        case "qq.container": "com.tencent.qq"
+        case "chrome.on-device-model", "chrome.profile-data": "com.google.Chrome"
+        case "edge.profile-data": "com.microsoft.edgemac"
+        case "firefox.profile-data": "org.mozilla.firefox"
+        case "safari.user-data": "com.apple.Safari"
+        case "cursor.state-database", "cursor.application-data": "com.todesktop.230313mzl4w4u92"
+        case "xcode.derived-data", "xcode.archives", "xcode.simulators": "com.apple.dt.Xcode"
+        case "docker.desktop-data": "com.docker.docker"
+        case "figma.application-data": "com.figma.Desktop"
+        case "steam.library": "com.valvesoftware.steam"
         default: nil
         }
     }

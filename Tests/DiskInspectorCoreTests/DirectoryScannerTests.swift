@@ -3,6 +3,22 @@ import Foundation
 import Testing
 @testable import DiskInspectorCore
 
+private actor ProgressLatch {
+    private var reached = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if reached { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func signal() {
+        reached = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 @Suite("Read-only directory scanner", .serialized)
 struct DirectoryScannerTests {
     @Test("Uses allocated size and aggregates directories")
@@ -73,6 +89,130 @@ struct DirectoryScannerTests {
         }
     }
 
+    @Test("Skips configured protected directories without reading their contents")
+    func protectedDirectoryExclusions() async throws {
+        try await withFixture { root in
+            let protected = root.appendingPathComponent("Pictures", isDirectory: true)
+            try FileManager.default.createDirectory(at: protected, withIntermediateDirectories: true)
+            try Data(repeating: 9, count: 4096).write(
+                to: protected.appendingPathComponent("private-photo.jpg")
+            )
+            try Data(repeating: 1, count: 2048).write(
+                to: root.appendingPathComponent("visible.bin")
+            )
+
+            let report = try await DirectoryScanner().scan(
+                rootURL: root,
+                configuration: ScanConfiguration(
+                    excludedDirectories: [
+                        ScanExcludedDirectory(
+                            path: protected.path,
+                            reason: "测试：按隐私设置跳过。"
+                        )
+                    ]
+                )
+            )
+
+            #expect(report.uniqueFiles == 1)
+            #expect(report.totalLogicalBytes == 2048)
+            #expect(report.protectedDirectorySkippedCount == 1)
+            #expect(report.hasCoverageGaps)
+            #expect(report.issues.contains {
+                $0.kind == .protectedDirectorySkipped &&
+                    $0.path == protected.path
+            })
+        }
+    }
+
+    @Test("Skips both app container roots while continuing the rest of the scan")
+    func appContainerExclusions() async throws {
+        try await withFixture { root in
+            let containers = root.appendingPathComponent("Library/Containers", isDirectory: true)
+            let groupContainers = root.appendingPathComponent(
+                "Library/Group Containers",
+                isDirectory: true
+            )
+            try FileManager.default.createDirectory(
+                at: containers.appendingPathComponent("com.example.private"),
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
+                at: groupContainers.appendingPathComponent("group.example.private"),
+                withIntermediateDirectories: true
+            )
+            try Data(repeating: 1, count: 4_096).write(
+                to: containers.appendingPathComponent("com.example.private/data.bin")
+            )
+            try Data(repeating: 2, count: 4_096).write(
+                to: groupContainers.appendingPathComponent("group.example.private/data.bin")
+            )
+            try Data(repeating: 3, count: 2_048).write(
+                to: root.appendingPathComponent("visible.bin")
+            )
+
+            let report = try await DirectoryScanner().scan(
+                rootURL: root,
+                configuration: ScanConfiguration(
+                    excludedDirectories: [
+                        ScanExcludedDirectory(path: containers.path, reason: "测试跳过容器。"),
+                        ScanExcludedDirectory(
+                            path: groupContainers.path,
+                            reason: "测试跳过共享容器。"
+                        )
+                    ]
+                )
+            )
+
+            #expect(report.uniqueFiles == 1)
+            #expect(report.totalLogicalBytes == 2_048)
+            #expect(report.protectedDirectorySkippedCount == 2)
+            #expect(report.issues.filter { $0.kind == .protectedDirectorySkipped }.count == 2)
+        }
+    }
+
+    @Test("A protected scan root returns an explicit coverage gap")
+    func protectedRootExclusion() async throws {
+        try await withFixture { root in
+            try Data([1, 2, 3]).write(to: root.appendingPathComponent("private.bin"))
+
+            let report = try await DirectoryScanner().scan(
+                rootURL: root,
+                configuration: ScanConfiguration(
+                    excludedDirectories: [
+                        ScanExcludedDirectory(
+                            path: root.path,
+                            reason: "测试：根目录默认跳过。"
+                        )
+                    ]
+                )
+            )
+
+            #expect(report.entriesVisited == 0)
+            #expect(report.uniqueFiles == 0)
+            #expect(report.protectedDirectorySkippedCount == 1)
+            #expect(report.issues.first?.kind == .protectedDirectorySkipped)
+        }
+    }
+
+    @Test("APFS Data volume mirrors cannot bypass protected directory exclusions")
+    func dataVolumeMirrorPathNormalization() {
+        #expect(
+            DirectoryScanner.comparisonPath(
+                "/System/Volumes/Data/Users/test/Music/Media.localized"
+            ) == "/Users/test/Music/Media.localized"
+        )
+        #expect(
+            DirectoryScanner.comparisonPath(
+                "/System/Volumes/Data/Users/test/Pictures/Photos Library.photoslibrary"
+            ) == "/Users/test/Pictures/Photos Library.photoslibrary"
+        )
+        #expect(
+            DirectoryScanner.comparisonPath(
+                "/System/Volumes/Data/private/var/folders/example"
+            ) == "/var/folders/example"
+        )
+    }
+
     @Test("Cancellation propagates")
     func cancellation() async throws {
         try await withFixture { root in
@@ -93,6 +233,43 @@ struct DirectoryScannerTests {
             await #expect(throws: CancellationError.self) {
                 _ = try await task.value
             }
+        }
+    }
+
+    @Test("Can return explicitly partial findings when cancellation requests them")
+    func partialResultsOnCancellation() async throws {
+        try await withFixture { root in
+            for index in 0..<400 {
+                try Data(repeating: UInt8(index % 255), count: 1_024).write(
+                    to: root.appendingPathComponent("file-\(index)")
+                )
+            }
+
+            let reachedProgress = ProgressLatch()
+            let task = Task {
+                try await DirectoryScanner().scan(
+                    rootURL: root,
+                    configuration: ScanConfiguration(
+                        progressInterval: 1,
+                        returnPartialResultsOnCancellation: true
+                    )
+                ) { update in
+                    if update.entriesVisited == 1 {
+                        Task { await reachedProgress.signal() }
+                    }
+                    Thread.sleep(forTimeInterval: 0.001)
+                }
+            }
+
+            await reachedProgress.wait()
+            task.cancel()
+            let report = try await task.value
+
+            #expect(report.isPartial)
+            #expect(report.entriesVisited > 0)
+            #expect(report.entriesVisited < 400)
+            #expect(report.uniqueFiles > 0)
+            #expect(report.hasCoverageGaps)
         }
     }
 

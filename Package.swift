@@ -37,6 +37,11 @@ let package = Package(
             name: "DiskInspectorCoreTests",
             dependencies: ["DiskInspectorCore"],
             path: "Tests/DiskInspectorCoreTests"
+        ),
+        .testTarget(
+            name: "MacDiskInspectorAppTests",
+            dependencies: ["MacDiskInspectorApp"],
+            path: "Tests/MacDiskInspectorAppTests"
         )
     ]
 )

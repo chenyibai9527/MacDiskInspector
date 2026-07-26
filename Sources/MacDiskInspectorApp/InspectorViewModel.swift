@@ -1,13 +1,90 @@
 import AppKit
+import Darwin
 import DiskInspectorCore
 import Foundation
 
 @MainActor
 final class InspectorViewModel: ObservableObject {
-    struct ScanSample: Identifiable, Sendable {
-        let id = UUID()
-        let entries: Int
-        let allocatedBytes: Int64
+    enum ProtectedDirectory: String, CaseIterable, Identifiable, Sendable {
+        case desktop
+        case documents
+        case downloads
+        case pictures
+        case music
+        case movies
+        case mail
+        case messages
+        case safari
+        case otherAppData
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .desktop: "桌面"
+            case .documents: "文稿"
+            case .downloads: "下载"
+            case .pictures: "图片与照片图库"
+            case .music: "音乐"
+            case .movies: "影片"
+            case .mail: "邮件数据"
+            case .messages: "信息数据"
+            case .safari: "Safari 数据"
+            case .otherAppData: "其他 App 数据"
+            }
+        }
+
+        var relativePaths: [String] {
+            switch self {
+            case .desktop: ["Desktop"]
+            case .documents: ["Documents"]
+            case .downloads: ["Downloads"]
+            case .pictures: ["Pictures"]
+            case .music: ["Music"]
+            case .movies: ["Movies"]
+            case .mail: ["Library/Mail"]
+            case .messages: ["Library/Messages"]
+            case .safari: ["Library/Safari"]
+            case .otherAppData: ["Library/Containers", "Library/Group Containers"]
+            }
+        }
+
+        var displayPath: String {
+            relativePaths.map { "~/\($0)" }.joined(separator: "、")
+        }
+
+        var systemImage: String {
+            switch self {
+            case .desktop: "menubar.dock.rectangle"
+            case .documents: "doc"
+            case .downloads: "arrow.down.circle"
+            case .pictures: "photo.on.rectangle"
+            case .music: "music.note"
+            case .movies: "film"
+            case .mail: "envelope"
+            case .messages: "message"
+            case .safari: "safari"
+            case .otherAppData: "app.badge"
+            }
+        }
+
+        var privacyExplanation: String {
+            if self == .otherAppData {
+                return "默认不会进入其他 App 的容器。开启后，扫描到微信等应用数据时，macOS 可能询问是否允许访问。"
+            }
+            return "\(displayPath) 默认不会进入。开启后，扫描到这里时 macOS 仍可能询问访问权限。"
+        }
+
+        func urls(homeDirectory: URL) -> [URL] {
+            relativePaths.map { relativePath in
+                relativePath
+                    .split(separator: "/")
+                    .reduce(homeDirectory) { partial, component in
+                        partial.appendingPathComponent(String(component), isDirectory: true)
+                    }
+                    .standardizedFileURL
+                }
+        }
     }
 
     struct FindingGroup: Identifiable, Sendable {
@@ -44,22 +121,61 @@ final class InspectorViewModel: ObservableObject {
     @Published var isScanning = false
     @Published private(set) var scanRootPath: String?
     @Published var errorMessage: String?
-    @Published var sortMode: FindingSort = .size {
-        didSet { scheduleSort() }
+    @Published var sortMode: FindingSort {
+        didSet {
+            defaults.set(sortMode.rawValue, forKey: PreferenceKey.defaultFindingSort)
+            scheduleSort()
+        }
+    }
+    @Published var showZeroByteFindings: Bool {
+        didSet {
+            defaults.set(showZeroByteFindings, forKey: PreferenceKey.showZeroByteFindings)
+            scheduleSort()
+        }
+    }
+    @Published var enabledProtectedDirectories: Set<ProtectedDirectory> {
+        didSet {
+            defaults.set(
+                enabledProtectedDirectories.map(\.rawValue).sorted(),
+                forKey: PreferenceKey.enabledProtectedDirectories
+            )
+        }
     }
     @Published private(set) var displayedFindings: [Finding] = []
     @Published private(set) var findingGroups: [FindingGroup] = []
     @Published private(set) var recommendationFindings: [Finding] = []
-    @Published private(set) var scanSamples: [ScanSample] = []
+    @Published private(set) var scanSamples: [ScanTrendPoint] = ScanTrendSeries().points
     @Published private(set) var isSorting = false
     @Published var statusMessage: String?
 
+    private enum PreferenceKey {
+        static let defaultFindingSort = "defaultFindingSort"
+        static let showZeroByteFindings = "showZeroByteFindings"
+        static let enabledProtectedDirectories = "enabledProtectedDirectories"
+    }
+
+    private let defaults: UserDefaults
     private let scanner = DirectoryScanner()
     private let volumeReader = VolumeReader()
     private var scanTask: Task<Void, Never>?
     private var sortTask: Task<Void, Never>?
     private var scanGeneration = UUID()
     private var sortGeneration = UUID()
+    private var scanTrendSeries = ScanTrendSeries()
+    private var lastScanURL: URL?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.sortMode = defaults.string(forKey: PreferenceKey.defaultFindingSort)
+            .flatMap(FindingSort.init(rawValue:)) ?? .size
+        self.showZeroByteFindings = defaults.bool(forKey: PreferenceKey.showZeroByteFindings)
+        let storedProtectedDirectories = defaults.stringArray(
+            forKey: PreferenceKey.enabledProtectedDirectories
+        ) ?? []
+        self.enabledProtectedDirectories = Set(
+            storedProtectedDirectories.compactMap(ProtectedDirectory.init(rawValue:))
+        )
+    }
 
     enum FindingSort: String, CaseIterable, Identifiable, Sendable {
         case size = "大小"
@@ -94,13 +210,14 @@ final class InspectorViewModel: ObservableObject {
     func chooseAndScan() {
         let panel = NSOpenPanel()
         panel.title = "选择要只读扫描的目录"
-        panel.message = "Mac Disk Inspector 只读取文件大小、日期和目录结构，不会修改任何文件。"
+        panel.message = "Mac 磁盘扫描助手只读取文件大小、日期和目录结构，不会修改任何文件。"
         panel.prompt = "开始只读扫描"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let temporarilyAllowed = temporaryProtectedAccess(for: url) else { return }
         if isVolumeRoot(url) {
             let alert = NSAlert()
             alert.alertStyle = .warning
@@ -110,10 +227,13 @@ final class InspectorViewModel: ObservableObject {
             alert.addButton(withTitle: "取消")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
-        startScan(url: url)
+        startScan(url: url, temporarilyAllowed: temporarilyAllowed)
     }
 
-    func startScan(url: URL) {
+    func startScan(
+        url: URL,
+        temporarilyAllowed: Set<ProtectedDirectory> = []
+    ) {
         scanTask?.cancel()
         scanGeneration = UUID()
         let generation = scanGeneration
@@ -122,11 +242,13 @@ final class InspectorViewModel: ObservableObject {
         displayedFindings = []
         findingGroups = []
         recommendationFindings = []
-        scanSamples = []
+        scanTrendSeries = ScanTrendSeries()
+        scanSamples = scanTrendSeries.points
         errorMessage = nil
         statusMessage = nil
         selectedFinding = nil
         scanRootPath = url.standardizedFileURL.path
+        lastScanURL = url
         isScanning = true
         selectedSection = .overview
 
@@ -137,11 +259,25 @@ final class InspectorViewModel: ObservableObject {
         }
 
         let fullVolume = isVolumeRoot(url)
+        let allowedProtectedDirectories = enabledProtectedDirectories.union(temporarilyAllowed)
+        let homeDirectory = Self.loginHomeDirectory()
+        let excludedDirectories = ProtectedDirectory.allCases
+            .filter { !allowedProtectedDirectories.contains($0) }
+            .flatMap { directory in
+                directory.urls(homeDirectory: homeDirectory).map { url in
+                    ScanExcludedDirectory(
+                        path: url.path,
+                        reason: "为避免意外触发敏感权限，“\(directory.title)”已按你的设置跳过。可在“设置 > 受保护目录”中选择是否扫描。"
+                    )
+                }
+            }
         let configuration = ScanConfiguration(
             aggregationDepth: fullVolume ? 2 : 3,
             stayOnSelectedVolume: true,
             deduplicateHardLinks: true,
-            progressInterval: fullVolume ? 1_000 : 400
+            progressInterval: fullVolume ? 1_000 : 400,
+            excludedDirectories: excludedDirectories,
+            returnPartialResultsOnCancellation: true
         )
 
         scanTask = Task { [weak self] in
@@ -163,10 +299,13 @@ final class InspectorViewModel: ObservableObject {
                         self.appendSample(update)
                     }
                 }
-                guard !Task.isCancelled, scanGeneration == generation else { return }
+                guard scanGeneration == generation else { return }
                 self.report = scanReport
                 self.selectedFinding = scanReport.findings.first
                 self.isScanning = false
+                if scanReport.isPartial {
+                    self.statusMessage = "扫描已停止，正在显示已经完成的部分。"
+                }
                 self.scheduleSort(refreshRecommendations: true)
             } catch is CancellationError {
                 if scanGeneration == generation {
@@ -181,10 +320,67 @@ final class InspectorViewModel: ObservableObject {
         }
     }
 
-    func cancelScan() {
+    func restoreDefaultPreferences() {
+        sortMode = .size
+        showZeroByteFindings = false
+        enabledProtectedDirectories = []
+    }
+
+    var canRescanLastLocation: Bool {
+        !isScanning && lastScanURL != nil
+    }
+
+    func rescanLastLocation() {
+        guard let lastScanURL, !isScanning else { return }
+        guard let temporarilyAllowed = temporaryProtectedAccess(for: lastScanURL) else { return }
+        startScan(url: lastScanURL, temporarilyAllowed: temporarilyAllowed)
+    }
+
+    func isProtectedDirectoryEnabled(_ directory: ProtectedDirectory) -> Bool {
+        enabledProtectedDirectories.contains(directory)
+    }
+
+    func setProtectedDirectory(_ directory: ProtectedDirectory, enabled: Bool) {
+        if enabled {
+            enabledProtectedDirectories.insert(directory)
+        } else {
+            enabledProtectedDirectories.remove(directory)
+        }
+    }
+
+    func requestCancelScan() {
+        guard isScanning else { return }
+        let stoppedProgress = progress
+        scanTask?.cancel()
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "要保留已经扫描的结果吗？"
+        if let stoppedProgress {
+            alert.informativeText = "扫描已经停止。目前已查看 \(stoppedProgress.entriesVisited.formatted()) 项，统计到 \(stoppedProgress.allocatedBytesMeasured.formattedBytes)。你可以查看这部分结果，也可以放弃本次扫描。"
+        } else {
+            alert.informativeText = "扫描已经停止。你可以查看目前已经完成的部分，也可以放弃本次扫描。"
+        }
+        alert.addButton(withTitle: "查看当前结果")
+        alert.addButton(withTitle: "放弃结果")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            break
+        default:
+            discardCurrentScan()
+        }
+    }
+
+    private func discardCurrentScan() {
         scanGeneration = UUID()
         scanTask?.cancel()
         scanTask = nil
+        report = nil
+        displayedFindings = []
+        findingGroups = []
+        recommendationFindings = []
+        progress = nil
         isScanning = false
     }
 
@@ -204,7 +400,7 @@ final class InspectorViewModel: ObservableObject {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(value, forType: .string)
             statusMessage = action.kind == .copyOfficialCleanupCommand
-                ? "清理命令已复制。Mac Disk Inspector 没有运行这条命令。"
+                ? "清理命令已复制。Mac 磁盘扫描助手没有运行这条命令。"
                 : "检查命令已复制。"
         case .deferAction:
             selectedFinding = nil
@@ -212,20 +408,21 @@ final class InspectorViewModel: ObservableObject {
     }
 
     private func appendSample(_ update: ScanProgress) {
-        scanSamples.append(
-            ScanSample(entries: update.entriesVisited, allocatedBytes: update.allocatedBytesMeasured)
+        scanTrendSeries.append(
+            entries: update.entriesVisited,
+            allocatedBytes: update.allocatedBytesMeasured
         )
-        if scanSamples.count > 80 {
-            scanSamples.removeFirst(scanSamples.count - 80)
-        }
+        scanSamples = scanTrendSeries.points
     }
 
     private func scheduleSort(refreshRecommendations: Bool = false) {
         sortTask?.cancel()
         let allFindings = report?.findings ?? []
-        let nonEmptyFindings = allFindings.filter { $0.allocatedBytes > 0 }
-        let findingsWithoutRoot = nonEmptyFindings.filter { $0.path != report?.rootPath }
-        let findings = findingsWithoutRoot.isEmpty ? nonEmptyFindings : findingsWithoutRoot
+        let visibleFindings = showZeroByteFindings
+            ? allFindings
+            : allFindings.filter { $0.allocatedBytes > 0 }
+        let findingsWithoutRoot = visibleFindings.filter { $0.path != report?.rootPath }
+        let findings = findingsWithoutRoot.isEmpty ? visibleFindings : findingsWithoutRoot
         guard !findings.isEmpty else {
             displayedFindings = []
             findingGroups = []
@@ -322,5 +519,58 @@ final class InspectorViewModel: ObservableObject {
             return url.standardizedFileURL.path == "/"
         }
         return volumeURL.standardizedFileURL.path == url.standardizedFileURL.path
+    }
+
+    private func protectedDirectory(containing url: URL) -> ProtectedDirectory? {
+        let path = privacyComparisonPath(url.path)
+        let homeDirectory = Self.loginHomeDirectory()
+        return ProtectedDirectory.allCases.first { directory in
+            directory.urls(homeDirectory: homeDirectory).contains { protectedURL in
+                let protectedPath = privacyComparisonPath(protectedURL.path)
+                return path == protectedPath || path.hasPrefix(protectedPath + "/")
+            }
+        }
+    }
+
+    private func temporaryProtectedAccess(
+        for url: URL
+    ) -> Set<ProtectedDirectory>? {
+        guard let protectedDirectory = protectedDirectory(containing: url),
+              !enabledProtectedDirectories.contains(protectedDirectory) else {
+            return []
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "这个目录默认不会扫描"
+        alert.informativeText = "“\(protectedDirectory.title)”属于受保护范围。继续只对本次扫描放行；macOS 仍可能显示系统权限提示。"
+        alert.addButton(withTitle: "只扫描这一次")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return [protectedDirectory]
+    }
+
+    private func privacyComparisonPath(_ rawPath: String) -> String {
+        let path = URL(fileURLWithPath: rawPath).standardizedFileURL.path
+        let dataVolumePrefix = "/System/Volumes/Data"
+        if path == dataVolumePrefix {
+            return "/"
+        }
+        if path.hasPrefix(dataVolumePrefix + "/") {
+            return String(path.dropFirst(dataVolumePrefix.count))
+        }
+        return path
+    }
+
+    nonisolated static func loginHomeDirectory() -> URL {
+        if let record = getpwuid(getuid()),
+           let homePath = record.pointee.pw_dir {
+            return URL(
+                fileURLWithPath: String(cString: homePath),
+                isDirectory: true
+            )
+            .standardizedFileURL
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
     }
 }

@@ -16,13 +16,13 @@ MDI_VERIFY_TEMP=$(mktemp -d "${TMPDIR:-/tmp}/mdi-package-verify.XXXXXX")
 trap 'rm -rf "$MDI_VERIFY_TEMP"' EXIT
 
 ditto -x -k "$MDI_ZIP_PATH" "$MDI_VERIFY_TEMP"
-MDI_APP_PATH="$MDI_VERIFY_TEMP/MacDiskInspector.app"
+MDI_APP_PATH="$MDI_VERIFY_TEMP/Mac 磁盘扫描助手.app"
 MDI_BINARY_PATH="$MDI_APP_PATH/Contents/MacOS/MacDiskInspector"
 MDI_PRIVACY_PATH="$MDI_APP_PATH/Contents/Resources/PrivacyInfo.xcprivacy"
 MDI_ENTITLEMENTS_PATH="$MDI_VERIFY_TEMP/entitlements.plist"
 
 [[ -d "$MDI_APP_PATH" ]] || {
-  print -u2 "MacDiskInspector.app is missing from package root."
+  print -u2 "Mac 磁盘扫描助手.app is missing from package root."
   exit 1
 }
 

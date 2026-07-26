@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MDI_PROJECT_ROOT=${0:A:h:h}
-MDI_APP_PATH="$MDI_PROJECT_ROOT/build/DerivedData/Build/Products/Release/MacDiskInspector.app"
+MDI_APP_PATH="$MDI_PROJECT_ROOT/build/DerivedData/Build/Products/Release/Mac 磁盘扫描助手.app"
 MDI_OUTPUT_DIR="$MDI_PROJECT_ROOT/build/community"
 MDI_RELEASE_LABEL=${MDI_RELEASE_LABEL:-0.2.0-rc5}
 MDI_ZIP_PATH="$MDI_OUTPUT_DIR/MacDiskInspector-$MDI_RELEASE_LABEL-universal-community.zip"
@@ -13,14 +13,6 @@ if [[ ! "$MDI_RELEASE_LABEL" =~ '^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$' ]]; then
 fi
 
 "$MDI_PROJECT_ROOT/Scripts/build-app.sh"
-
-codesign \
-  --force \
-  --deep \
-  --sign - \
-  --options runtime \
-  --entitlements "$MDI_PROJECT_ROOT/App/MacDiskInspector.entitlements" \
-  "$MDI_APP_PATH"
 
 codesign --verify --deep --strict --verbose=2 "$MDI_APP_PATH"
 

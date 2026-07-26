@@ -4,6 +4,9 @@
 # Swift Package Manager
 .build/
 .swiftpm/
+/tmp/
+/output/
+__pycache__/
 
 # Xcode local state
 DerivedData/
@@ -22,8 +25,20 @@ xcuserdata/
 *.provisionprofile
 *.mobileprovision
 
+# Generated distribution artwork and fallback copy
+/Distribution/DMG/background.png
+/Distribution/DMG/background@2x.png
+/Distribution/DMG/打不开请看这里.txt
+/Distribution/DMG/VolumeIcon.iconset/
+/Distribution/DMG/VolumeIcon.icns
+
 # Local secrets
 .env
 .env.*
 !.env.example
 *.key
+
+# Local AI notes and intermediate review artifacts
+/.workbuddy/
+/Documentation/COPY_AUDIT.html
+/Brand/Distribution/DMG-Icon-Chroma-ImageGen.png

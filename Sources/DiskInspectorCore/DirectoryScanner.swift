@@ -1,25 +1,41 @@
 import Darwin
 import Foundation
 
+public struct ScanExcludedDirectory: Hashable, Sendable {
+    public let path: String
+    public let reason: String
+
+    public init(path: String, reason: String) {
+        self.path = URL(fileURLWithPath: path).standardizedFileURL.path
+        self.reason = reason
+    }
+}
+
 public struct ScanConfiguration: Sendable {
     public var aggregationDepth: Int
     public var stayOnSelectedVolume: Bool
     public var deduplicateHardLinks: Bool
     public var progressInterval: Int
     public var maxRecordedIssues: Int
+    public var excludedDirectories: [ScanExcludedDirectory]
+    public var returnPartialResultsOnCancellation: Bool
 
     public init(
         aggregationDepth: Int = 3,
         stayOnSelectedVolume: Bool = true,
         deduplicateHardLinks: Bool = true,
         progressInterval: Int = 250,
-        maxRecordedIssues: Int = 5_000
+        maxRecordedIssues: Int = 5_000,
+        excludedDirectories: [ScanExcludedDirectory] = [],
+        returnPartialResultsOnCancellation: Bool = false
     ) {
         self.aggregationDepth = max(1, aggregationDepth)
         self.stayOnSelectedVolume = stayOnSelectedVolume
         self.deduplicateHardLinks = deduplicateHardLinks
         self.progressInterval = max(1, progressInterval)
         self.maxRecordedIssues = max(1, maxRecordedIssues)
+        self.excludedDirectories = excludedDirectories
+        self.returnPartialResultsOnCancellation = returnPartialResultsOnCancellation
     }
 }
 
@@ -49,6 +65,7 @@ private final class EnumerationIssueCollector: NSObject, FileManagerDelegate {
     var issues: [ScanIssue] = []
     private(set) var totalIssueCount = 0
     private(set) var inaccessibleIssueCount = 0
+    private(set) var protectedDirectorySkippedCount = 0
 
     init(limit: Int) {
         self.limit = limit
@@ -89,6 +106,9 @@ private final class EnumerationIssueCollector: NSObject, FileManagerDelegate {
         if issue.kind == .permissionDenied || issue.kind == .enumerationFailed {
             inaccessibleIssueCount += 1
         }
+        if issue.kind == .protectedDirectorySkipped {
+            protectedDirectorySkippedCount += 1
+        }
         if issues.count < limit {
             issues.append(issue)
         }
@@ -124,8 +144,48 @@ public final class DirectoryScanner: @unchecked Sendable {
     ) throws -> ScanReport {
         let startedAt = Date()
         let root = rootURL.standardizedFileURL
+        let excludedDirectories = configuration.excludedDirectories
+            .map {
+                ScanExcludedDirectory(
+                    path: Self.comparisonPath($0.path),
+                    reason: $0.reason
+                )
+            }
         guard root.isFileURL else {
             throw CocoaError(.fileReadNoSuchFile)
+        }
+        if let exclusion = excludedDirectories.first(where: {
+            Self.path(Self.comparisonPath(root.path), isEqualToOrInside: $0.path)
+        }) {
+            let issue = ScanIssue(
+                path: root.path,
+                kind: .protectedDirectorySkipped,
+                message: exclusion.reason
+            )
+            progress(
+                ScanProgress(
+                    currentPath: root.path,
+                    entriesVisited: 0,
+                    allocatedBytesMeasured: 0
+                )
+            )
+            return ScanReport(
+                rootPath: root.path,
+                startedAt: startedAt,
+                finishedAt: Date(),
+                findings: [],
+                issues: [issue],
+                totalIssueCount: 1,
+                inaccessibleIssueCount: 0,
+                protectedDirectorySkippedCount: 1,
+                omittedIssueCount: 0,
+                entriesVisited: 0,
+                uniqueFiles: 0,
+                duplicateHardLinksSkipped: 0,
+                totalAllocatedBytes: 0,
+                totalLogicalBytes: 0,
+                isPartial: false
+            )
         }
         let rootStat = try Self.fileStat(atPath: root.path)
         guard !rootStat.isSymbolicLink else {
@@ -157,10 +217,31 @@ public final class DirectoryScanner: @unchecked Sendable {
         var duplicateHardLinksSkipped = 0
         var totalAllocated: Int64 = 0
         var totalLogical: Int64 = 0
+        var wasCancelled = false
 
         for case let itemURL as URL in enumerator {
-            try Task.checkCancellation()
+            if Task.isCancelled {
+                guard configuration.returnPartialResultsOnCancellation else {
+                    throw CancellationError()
+                }
+                wasCancelled = true
+                break
+            }
             entriesVisited += 1
+
+            if let exclusion = excludedDirectories.first(where: {
+                Self.path(Self.comparisonPath(itemURL.path), isEqualToOrInside: $0.path)
+            }) {
+                enumerator.skipDescendants()
+                issueCollector.append(
+                    ScanIssue(
+                        path: exclusion.path,
+                        kind: .protectedDirectorySkipped,
+                        message: exclusion.reason
+                    )
+                )
+                continue
+            }
 
             let stat: PortableStat
             do {
@@ -272,13 +353,41 @@ public final class DirectoryScanner: @unchecked Sendable {
             issues: issueCollector.issues,
             totalIssueCount: issueCollector.totalIssueCount,
             inaccessibleIssueCount: issueCollector.inaccessibleIssueCount,
+            protectedDirectorySkippedCount: issueCollector.protectedDirectorySkippedCount,
             omittedIssueCount: issueCollector.omittedIssueCount,
             entriesVisited: entriesVisited,
             uniqueFiles: uniqueFiles,
             duplicateHardLinksSkipped: duplicateHardLinksSkipped,
             totalAllocatedBytes: totalAllocated,
-            totalLogicalBytes: totalLogical
+            totalLogicalBytes: totalLogical,
+            isPartial: wasCancelled
         )
+    }
+
+    private static func path(_ candidate: String, isEqualToOrInside ancestor: String) -> Bool {
+        candidate == ancestor || candidate.hasPrefix(ancestor + "/")
+    }
+
+    static func comparisonPath(_ path: String) -> String {
+        var standardized = URL(fileURLWithPath: path).standardizedFileURL.path
+
+        // The writable APFS Data volume is also reachable through
+        // /System/Volumes/Data. Normalize that mirror before applying exclusions
+        // so a full-volume scan cannot enter a protected directory through its
+        // second system path.
+        let dataVolumePrefix = "/System/Volumes/Data"
+        if standardized == dataVolumePrefix {
+            standardized = "/"
+        } else if standardized.hasPrefix(dataVolumePrefix + "/") {
+            standardized = String(standardized.dropFirst(dataVolumePrefix.count))
+        }
+
+        for privatePrefix in ["/private/var", "/private/tmp", "/private/etc"] {
+            if standardized == privatePrefix || standardized.hasPrefix(privatePrefix + "/") {
+                return String(standardized.dropFirst("/private".count))
+            }
+        }
+        return standardized
     }
 
     private func aggregatePaths(fileURL: URL, rootURL: URL, depth: Int) -> [String] {

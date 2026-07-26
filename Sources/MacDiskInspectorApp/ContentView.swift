@@ -1,3 +1,4 @@
+import AppKit
 import DiskInspectorCore
 import Charts
 import SwiftUI
@@ -5,53 +6,100 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var model: InspectorViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPrivacyFooterHovered = false
 
     var body: some View {
         NavigationSplitView {
-            List(InspectorViewModel.Section.allCases, selection: sectionSelection) { section in
-                Label(section.rawValue, systemImage: section.systemImage)
-                    .tag(section)
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(InspectorViewModel.Section.allCases) { section in
+                        StableSidebarRow(
+                            section: section,
+                            isSelected: (model.selectedSection ?? .overview) == section
+                        ) {
+                            selectSection(section)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
             }
-            .navigationTitle("Disk Inspector")
+            .navigationTitle("Mac 磁盘扫描助手")
+            .navigationSplitViewColumnWidth(min: 200, ideal: 210, max: 260)
             .safeAreaInset(edge: .bottom) {
                 privacyFooter
             }
         } detail: {
-            ZStack {
-                InspectorBackdrop()
+            GeometryReader { proxy in
+                ZStack {
+                    InspectorBackdrop()
+                        .adaptiveBackgroundExtension()
 
-                VStack(spacing: 0) {
-                    ScanCommandBar()
-                        .padding(.horizontal, 20)
-                        .padding(.top, 14)
-                        .padding(.bottom, 8)
-                        .zIndex(2)
-
-                    Group {
-                        switch model.selectedSection ?? .overview {
-                        case .overview:
-                            OverviewView()
-                        case .findings:
-                            FindingsView()
-                        case .recommendations:
-                            RecommendationsView()
-                        case .issues:
-                            IssuesView()
-                        case .guide:
-                            GuideView()
-                        }
+                    selectedPage
+                        .frame(
+                            width: proxy.size.width,
+                            height: proxy.size.height
+                        )
+                }
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
+                .clipped()
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if model.isScanning {
+                    HStack(spacing: 7) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("正在扫描")
+                            .font(.callout)
                     }
-                    .id(model.selectedSection)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .trailing)),
-                                removal: .opacity.combined(with: .move(edge: .leading))
-                            )
-                    )
+                    .padding(.horizontal, 4)
+                    .fixedSize()
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("正在只读扫描")
+
+                    Button("取消", role: .cancel) {
+                        model.requestCancelScan()
+                    }
+                } else if model.report != nil {
+                    Button {
+                        model.rescanLastLocation()
+                    } label: {
+                        Label("重新扫描", systemImage: "arrow.clockwise")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .disabled(!model.canRescanLastLocation)
+                    .help("再次扫描上次选择的目录")
+
+                    Button {
+                        model.chooseAndScan()
+                    } label: {
+                        Label("其他目录", systemImage: "folder.badge.plus")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .help("选择其他目录并开始只读扫描")
+                } else {
+                    Button {
+                        model.chooseAndScan()
+                    } label: {
+                        Label(
+                            model.report == nil ? "选择目录" : "重新扫描",
+                            systemImage: "folder.badge.plus"
+                        )
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .help(model.report == nil ? "选择目录并开始只读扫描" : "重新选择扫描目录")
                 }
             }
+        }
+        .toolbarBackground(Color(nsColor: .windowBackgroundColor), for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
+        .background {
+            UnifiedWindowChrome()
         }
         .alert("无法完成扫描", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -89,90 +137,149 @@ struct ContentView: View {
         )
     }
 
-    private var sectionSelection: Binding<InspectorViewModel.Section?> {
-        Binding(
-            get: { model.selectedSection },
-            set: { newValue in
-                withAnimation(
-                    reduceMotion
-                        ? .linear(duration: 0.16)
-                        : .spring(response: 0.36, dampingFraction: 1)
-                ) {
-                    model.selectedSection = newValue
-                }
-            }
-        )
+    private func selectSection(_ section: InspectorViewModel.Section) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            model.selectedSection = section
+        }
     }
 
-    private var privacyFooter: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Label("只在本机分析", systemImage: "lock.shield")
-                .font(.headline)
-            Text("不删除、移动或上传")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    @ViewBuilder
+    private var selectedPage: some View {
+        switch model.selectedSection ?? .overview {
+        case .overview:
+            OverviewView()
+        case .findings:
+            FindingsView()
+        case .recommendations:
+            RecommendationsView()
+        case .issues:
+            IssuesView()
+        case .guide:
+            GuideView()
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .adaptiveFunctionalGlass(cornerRadius: 16)
-        .padding(10)
+    }
+
+    @ViewBuilder
+    private var privacyFooter: some View {
+        if #available(macOS 14.0, *) {
+            SettingsLink {
+                privacyFooterLabel
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                openLegacySettings()
+            } label: {
+                privacyFooterLabel
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var privacyFooterLabel: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .opacity(0.45)
+
+            HStack(spacing: 9) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        Color.green.opacity(0.11),
+                        in: Circle()
+                    )
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("只在本机分析")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+
+                    Text("不上传 · 不改文件")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+            .background(Color.primary.opacity(isPrivacyFooterHovered ? 0.055 : 0))
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovered in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isPrivacyFooterHovered = isHovered
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("打开设置。只在本机分析，不上传，不修改文件")
+        .help("打开设置")
+    }
+
+    private func openLegacySettings() {
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 }
 
-private struct ScanCommandBar: View {
-    @EnvironmentObject private var model: InspectorViewModel
+private struct StableSidebarRow: View {
+    let section: InspectorViewModel.Section
+    let isSelected: Bool
+    let action: () -> Void
+
+    @Environment(\.controlActiveState) private var controlActiveState
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(model.isScanning ? Color.accentColor.opacity(0.16) : Color.green.opacity(0.14))
-                Image(systemName: model.isScanning ? "waveform.path.ecg" : "lock.shield.fill")
-                    .foregroundStyle(model.isScanning ? Color.accentColor : Color.green)
-            }
-            .frame(width: 36, height: 36)
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: section.systemImage)
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 18, alignment: .center)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(model.isScanning ? "正在本机只读扫描" : "本机分析 · 不会删除文件")
-                    .font(.headline)
-                Text(scopeDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(section.rawValue)
                     .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            if model.isScanning {
-                ProgressView()
-                    .controlSize(.small)
-                Button("取消", role: .cancel) {
-                    model.cancelScan()
-                }
-                .adaptiveGlassButtonStyle()
-            } else {
-                Button {
-                    model.chooseAndScan()
-                } label: {
-                    Label(model.report == nil ? "选择目录" : "重新扫描", systemImage: "folder.badge.plus")
-                }
-                .adaptiveProminentGlassButtonStyle()
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(rowBackground)
+            )
+            .foregroundStyle(rowForeground)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: 980)
-        .adaptiveFunctionalGlass(cornerRadius: 20, interactive: true)
-        .shadow(color: .black.opacity(0.12), radius: 18, y: 7)
-        .accessibilityElement(children: .contain)
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(nil, value: isSelected)
+        .animation(nil, value: isHovered)
+        .accessibilityLabel(section.rawValue)
+        .accessibilityValue(isSelected ? "已选择" : "")
     }
 
-    private var scopeDescription: String {
-        if let path = model.scanRootPath {
-            return path
+    private var rowBackground: Color {
+        if isSelected {
+            return controlActiveState == .key
+                ? Color.accentColor
+                : Color.primary.opacity(0.12)
         }
-        return "路径、文件名和统计结果不会离开这台 Mac"
+        return isHovered ? Color.primary.opacity(0.06) : .clear
+    }
+
+    private var rowForeground: Color {
+        isSelected && controlActiveState == .key ? .white : .primary
     }
 }
 
@@ -194,6 +301,7 @@ private struct OverviewView: View {
                 if model.isScanning, let progress = model.progress {
                     scanningCard(progress)
                 } else if let report = model.report {
+                    scanCompletedCard(report)
                     summaryGrid(report)
                     UsageVisualization(report: report)
                     coverageCard(report)
@@ -203,7 +311,7 @@ private struct OverviewView: View {
             }
             .padding(28)
             .frame(maxWidth: 980, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
@@ -227,7 +335,7 @@ private struct OverviewView: View {
             .foregroundStyle(.secondary)
             if let important = capacity.availableForImportantUsageBytes,
                important > capacity.availableBytes {
-                Text("macOS 估计，在系统自行回收部分空间后，重要任务最多可使用约 \(important.formattedBytes)。这不是现在的可用空间。")
+                Text("据 macOS 估算，系统回收部分空间后，重要任务最多可使用约 \(important.formattedBytes)；这不是当前的可用空间。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -265,8 +373,9 @@ private struct OverviewView: View {
                 }
                 .chartXAxis(.hidden)
                 .chartYAxis(.hidden)
+                .chartXScale(domain: 0...max(1, progress.entriesVisited))
                 .frame(height: 64)
-                .accessibilityLabel("扫描进度趋势")
+                .accessibilityLabel("从扫描开始到当前的已统计空间趋势")
             }
         }
         .inspectorCard()
@@ -276,40 +385,131 @@ private struct OverviewView: View {
     private func summaryGrid(_ report: ScanReport) -> some View {
         HStack(spacing: 14) {
             MetricCard(title: "已分配空间", value: report.totalAllocatedBytes.formattedBytes, systemImage: "square.stack.3d.up")
-            MetricCard(title: "唯一文件", value: report.uniqueFiles.formatted(), systemImage: "doc.on.doc")
+            MetricCard(title: "独立文件", value: report.uniqueFiles.formatted(), systemImage: "doc.on.doc")
             MetricCard(title: "分析结果", value: report.findings.count.formatted(), systemImage: "list.bullet")
-            MetricCard(title: "访问问题", value: report.totalIssueCount.formatted(), systemImage: "exclamationmark.triangle")
+            MetricCard(title: "未扫描与访问问题", value: report.totalIssueCount.formatted(), systemImage: "exclamationmark.triangle")
         }
     }
 
+    private func scanCompletedCard(_ report: ScanReport) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: report.isPartial
+                ? "pause.circle.fill"
+                : "checkmark.circle.fill")
+                .font(.title2)
+                .foregroundStyle(report.isPartial ? .orange : .green)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(report.isPartial ? "已停止，显示当前结果" : "扫描完成")
+                    .font(.headline)
+                if report.isPartial {
+                    Text("以下内容只代表取消前已经完成的部分，不是整个目录的完整结果。")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                Text(report.rootPath)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 18)
+
+            Button {
+                model.rescanLastLocation()
+            } label: {
+                Label("重新扫描", systemImage: "arrow.clockwise")
+            }
+            .disabled(!model.canRescanLastLocation)
+            .adaptiveGlassButtonStyle()
+
+            Button {
+                model.chooseAndScan()
+            } label: {
+                Label("选择其他目录", systemImage: "folder.badge.plus")
+            }
+            .adaptiveGlassButtonStyle()
+        }
+        .inspectorCard()
+        .frame(maxWidth: .infinity)
+    }
+
     private func coverageCard(_ report: ScanReport) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let skipped = report.protectedDirectorySkippedCount
+        let inaccessible = report.inaccessibleIssueCount
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("本次扫描是否完整")
                     .font(.headline)
                 Spacer()
                 Label(
-                    report.hasCoverageGaps ? "有内容未能读取" : "未发现读取错误",
+                    report.isPartial
+                        ? "只包含已扫描部分"
+                        : inaccessible > 0
+                        ? "有内容未能读取"
+                        : skipped > 0
+                            ? "部分目录按设置跳过"
+                            : "未发现读取错误",
                     systemImage: report.hasCoverageGaps
                         ? "exclamationmark.triangle.fill"
                         : "checkmark.circle.fill"
                 )
                 .foregroundStyle(report.hasCoverageGaps ? .orange : .green)
             }
-            Text(report.hasCoverageGaps
-                ? "有 \(report.inaccessibleIssueCount.formatted()) 个目录或文件未能读取。无法知道这些目录里还有多少内容，因此这里不显示容易误导的百分比。"
-                : "扫描时没有遇到权限或目录读取错误。主动跳过的符号链接、其他磁盘和特殊文件仍会列在“访问问题”中。")
+            Text(coverageDescription(report))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if !report.issues.isEmpty {
-                Button("查看问题 \(report.totalIssueCount.formatted()) 项") {
-                    model.selectedSection = .issues
+                HStack {
+                    Button("查看未扫描项目 \(report.totalIssueCount.formatted()) 项") {
+                        model.selectedSection = .issues
+                    }
+                    .adaptiveGlassButtonStyle()
+
+                    if skipped > 0 {
+                        protectedDirectorySettingsButton
+                    }
                 }
-                .adaptiveGlassButtonStyle()
             }
         }
         .inspectorCard()
         .frame(maxWidth: .infinity)
+    }
+
+    private func coverageDescription(_ report: ScanReport) -> String {
+        let skipped = report.protectedDirectorySkippedCount
+        let inaccessible = report.inaccessibleIssueCount
+        if report.isPartial {
+            return "你在扫描完成前选择了查看当前结果。这里仅统计取消前已经访问到的内容，不能用来判断整个目录的总占用；重新扫描可获得完整结果。"
+        }
+        if skipped > 0, inaccessible > 0 {
+            return "按你的设置跳过了 \(skipped.formatted()) 个受保护目录，另有 \(inaccessible.formatted()) 个目录或文件未能读取。未知内容无法可靠估算，因此不显示容易误导的覆盖率百分比。"
+        }
+        if skipped > 0 {
+            return "按你的设置跳过了 \(skipped.formatted()) 个受保护目录。它们没有被计入占用结果，你可以在设置中逐项选择是否扫描。"
+        }
+        if inaccessible > 0 {
+            return "有 \(inaccessible.formatted()) 个目录或文件未能读取。无法知道其中还有多少内容，因此不显示容易误导的覆盖率百分比。"
+        }
+        return "扫描时没有遇到权限或目录读取错误。主动跳过的符号链接、其他磁盘和特殊文件仍会列在“访问问题”中。"
+    }
+
+    @ViewBuilder
+    private var protectedDirectorySettingsButton: some View {
+        if #available(macOS 14.0, *) {
+            SettingsLink {
+                Label("管理受保护目录", systemImage: "slider.horizontal.3")
+            }
+            .adaptiveGlassButtonStyle()
+        } else {
+            Button {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            } label: {
+                Label("管理受保护目录", systemImage: "slider.horizontal.3")
+            }
+            .adaptiveGlassButtonStyle()
+        }
     }
 
     private var emptyState: some View {
@@ -321,7 +521,7 @@ private struct OverviewView: View {
             Button("选择目录并扫描…") {
                 model.chooseAndScan()
             }
-            .adaptiveProminentGlassButtonStyle()
+            .adaptiveProminentGlassButtonStyle(controlSize: .large)
         }
         .frame(maxWidth: .infinity, minHeight: 320)
     }
@@ -331,69 +531,83 @@ private struct FindingsView: View {
     @EnvironmentObject private var model: InspectorViewModel
 
     var body: some View {
-        HSplitView {
-            VStack(spacing: 0) {
-                HStack {
-                    Text("占用排行")
-                        .font(.title2.bold())
-                    Spacer()
-                    AdaptiveFindingSortPicker(selection: $model.sortMode)
-                    .frame(width: 230)
-                }
-                .padding()
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    VStack(spacing: 10) {
+                        HStack {
+                            Text("占用排行")
+                                .font(.title2.bold())
+                            Spacer()
+                            AdaptiveFindingSortPicker(selection: $model.sortMode)
+                                .frame(width: 230)
+                        }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Label(model.sortMode.explanation, systemImage: "arrow.up.arrow.down")
-                    Text("已隐藏占用为零的项目和最外层目录汇总。文件夹大小包含其中的下级内容。")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
-                .padding(.bottom, 10)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(model.sortMode.explanation, systemImage: "arrow.up.arrow.down")
+                            Text(model.showZeroByteFindings
+                                ? "当前显示占用为零的项目；最外层目录汇总仍会隐藏。文件夹大小包含其中的下级内容。"
+                                : "已隐藏占用为零的项目和最外层目录汇总。文件夹大小包含其中的下级内容。")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(16)
+                    .overlay(alignment: .bottom) {
+                        Divider().opacity(0.5)
+                    }
 
-                Divider()
-
-                if model.displayedFindings.isEmpty {
-                    EmptyStateView(
-                        title: "没有扫描结果",
-                        systemImage: "list.bullet.rectangle",
-                        description: "先选择目录开始只读扫描。"
-                    )
-                } else {
-                    List(selection: $model.selectedFinding) {
-                        ForEach(model.findingGroups) { group in
-                            Section(group.title) {
-                                ForEach(group.findings) { finding in
-                                    FindingRow(finding: finding)
-                                        .tag(finding)
+                    if model.displayedFindings.isEmpty {
+                        EmptyStateView(
+                            title: "没有扫描结果",
+                            systemImage: "list.bullet.rectangle",
+                            description: "先选择目录开始只读扫描。"
+                        )
+                    } else {
+                        List(selection: $model.selectedFinding) {
+                            ForEach(model.findingGroups) { group in
+                                Section(group.title) {
+                                    ForEach(group.findings) { finding in
+                                        FindingRow(finding: finding)
+                                            .tag(finding)
+                                            .listRowBackground(Color.clear)
+                                    }
                                 }
                             }
                         }
-                    }
-                    .overlay {
-                        if model.isSorting {
-                            ProgressView("正在排序…")
-                                .padding(12)
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .overlay {
+                            if model.isSorting {
+                                ProgressView("正在排序…")
+                                    .padding(12)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            }
                         }
                     }
                 }
-            }
-            .frame(minWidth: 420)
+                .frame(width: findingsListWidth(for: proxy.size.width))
 
-            Group {
-                if let finding = model.selectedFinding {
-                    FindingDetailView(finding: finding)
-                } else {
-                    EmptyStateView(
-                        title: "选择一项查看详情",
-                        systemImage: "doc.text.magnifyingglass"
-                    )
+                Divider()
+
+                Group {
+                    if let finding = model.selectedFinding {
+                        FindingDetailView(finding: finding)
+                    } else {
+                        EmptyStateView(
+                            title: "选择一项查看详情",
+                            systemImage: "doc.text.magnifyingglass"
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(minWidth: 380)
         }
+    }
+
+    private func findingsListWidth(for availableWidth: CGFloat) -> CGFloat {
+        min(max(availableWidth * 0.46, 420), 560)
     }
 }
 
@@ -482,7 +696,7 @@ private struct FindingDetailView: View {
             detailRow("逻辑大小", finding.logicalBytes.formattedBytes)
             detailRow("文件数量", finding.fileCount.formatted())
             detailRow("来源应用", finding.sourceApplication ?? "未知")
-            detailRow("判断把握", finding.confidence.rawValue)
+            detailRow("判断可信度", finding.confidence.rawValue)
             detailRow(
                 "可能可释放",
                 finding.potentialReclaimableBytes?.formattedBytes ?? "暂不估算"
@@ -526,7 +740,7 @@ private struct RecommendationsView: View {
                                 .font(.caption)
                         }
                         Spacer()
-                        Button("查看证据") {
+                        Button("查看依据") {
                             model.selectedFinding = finding
                             model.selectedSection = .findings
                         }
@@ -547,7 +761,7 @@ private struct RecommendationsView: View {
             }
             .padding(28)
             .frame(maxWidth: 920, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 }
@@ -632,10 +846,22 @@ private struct IssuesView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
-
-            Divider()
+            .overlay(alignment: .bottom) {
+                Divider().opacity(0.5)
+            }
 
             if let issues = model.report?.issues, !issues.isEmpty {
+                if let report = model.report, report.protectedDirectorySkippedCount > 0 {
+                    Label(
+                        "其中 \(report.protectedDirectorySkippedCount.formatted()) 项是为避免意外触发敏感权限而按设置跳过的目录，并非读取失败。",
+                        systemImage: "hand.raised.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                }
                 if let report = model.report, report.omittedIssueCount > 0 {
                     Text("为避免全盘扫描占用过多内存，这里只保留前 \(issues.count.formatted()) 项；另外 \(report.omittedIssueCount.formatted()) 项只计数，不保留明细。")
                         .font(.caption)
@@ -650,9 +876,7 @@ private struct IssuesView: View {
                             Text(issue.kind.rawValue)
                                 .font(.headline)
                             Spacer()
-                            Image(systemName: issue.kind == .permissionDenied
-                                ? "lock.fill"
-                                : "exclamationmark.triangle")
+                            Image(systemName: issueIcon(issue.kind))
                                 .foregroundStyle(.secondary)
                         }
                         Text(issue.path)
@@ -663,14 +887,28 @@ private struct IssuesView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 6)
+                    .listRowBackground(Color.clear)
                 }
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
             } else {
                 EmptyStateView(
                     title: "没有记录到访问问题",
                     systemImage: "checkmark.shield",
-                    description: "这只说明本次选择的范围没有报告读取错误，并不表示应用绕过了 macOS 的权限限制。"
+                    description: "这只说明本次选择的范围内没有出现读取错误，并不表示应用绕过了 macOS 的权限限制。"
                 )
             }
+        }
+    }
+
+    private func issueIcon(_ kind: ScanIssueKind) -> String {
+        switch kind {
+        case .permissionDenied:
+            "lock.fill"
+        case .protectedDirectorySkipped:
+            "eye.slash"
+        default:
+            "exclamationmark.triangle"
         }
     }
 }
@@ -687,7 +925,7 @@ private struct GuideView: View {
                 guideSection(
                     "从哪里开始",
                     systemImage: "1.circle",
-                    text: "第一次使用，建议先选择你的个人文件夹，或某个已经怀疑占用较大的应用目录。扫描完成后，先看占用排行，再打开具体项目查看说明和处理建议。"
+                    text: "第一次使用，建议先选择你的个人文件夹，或某个已经怀疑占用较大的应用目录。扫描完成后，概览页会显示“重新扫描”和“选择其他目录”；先看占用排行，再打开具体项目查看说明和处理建议。"
                 )
                 guideSection(
                     "为什么不建议一上来扫描整块硬盘",
@@ -702,17 +940,22 @@ private struct GuideView: View {
                 guideSection(
                     "你的数据会离开这台 Mac 吗",
                     systemImage: "lock.shield",
-                    text: "不会。路径、文件名和扫描结果都只留在本机。Mac Disk Inspector 不联网，不删除、不移动、不修改文件，也不会替你运行任何终端命令。"
+                    text: "不会。路径、文件名和扫描结果都只留在本机。Mac 磁盘扫描助手不联网，不删除、不移动、不修改文件，也不会替你运行任何终端命令。"
                 )
                 guideSection(
                     "为什么有些目录读不到",
                     systemImage: "hand.raised",
-                    text: "“邮件”“信息”、Safari 等目录受 macOS 保护。读不到时，应用会如实列出这些目录，不会把它们算成零，也不会要求管理员权限。"
+                    text: "“图片与照片图库”“音乐”“邮件”“信息”、Safari 和“其他 App 数据”默认跳过，避免扫描时突然出现权限提示。你可以在设置的“受保护目录”中逐项开启；只有实际扫描到相应范围时，macOS 才可能询问。拒绝权限不会中断其他目录的扫描。"
+                )
+                guideSection(
+                    "频繁扫描会伤硬盘吗",
+                    systemImage: "internaldrive",
+                    text: "正常使用不会。扫描器主要读取目录结构、大小和日期，不打开文件内容；SSD 的耐久消耗主要来自写入。不过全盘扫描会暂时占用 CPU、磁盘带宽和电量，因此不建议连续反复运行。优先扫描个人文件夹或可疑目录，通常更快也更安静。"
                 )
             }
             .padding(28)
             .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
@@ -805,21 +1048,26 @@ private struct EmptyStateView<Actions: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 34, weight: .regular))
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.title3.bold())
-            if let description {
-                Text(description)
+        VStack {
+            VStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 34, weight: .regular))
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 380)
+                Text(title)
+                    .font(.title3.bold())
+                if let description {
+                    Text(description)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 380)
+                }
+                actions
             }
-            actions
+            .padding(30)
+            .frame(maxWidth: 460)
+            .inspectorContentSurface(cornerRadius: 24)
         }
-        .padding(28)
+        .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -870,11 +1118,7 @@ private extension FindingRisk {
 private extension View {
     func inspectorCard() -> some View {
         padding(16)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            }
+            .inspectorContentSurface(cornerRadius: 14)
     }
 }
 

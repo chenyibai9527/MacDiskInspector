@@ -1,21 +1,51 @@
+import AppKit
 import SwiftUI
+
+struct UnifiedWindowChrome: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        configureWindow(for: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        configureWindow(for: nsView)
+    }
+
+    private func configureWindow(for view: NSView) {
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.titlebarAppearsTransparent = true
+            window.toolbarStyle = .unified
+            window.backgroundColor = .windowBackgroundColor
+        }
+    }
+}
 
 extension View {
     @ViewBuilder
-    func adaptiveGlassButtonStyle() -> some View {
+    func adaptiveGlassButtonStyle(controlSize: ControlSize = .regular) -> some View {
         if #available(macOS 26.0, *) {
-            buttonStyle(.glass)
+            self
+                .controlSize(controlSize)
+                .buttonStyle(.glass)
         } else {
-            buttonStyle(.bordered)
+            self
+                .controlSize(controlSize)
+                .buttonStyle(.bordered)
         }
     }
 
     @ViewBuilder
-    func adaptiveProminentGlassButtonStyle() -> some View {
+    func adaptiveProminentGlassButtonStyle(controlSize: ControlSize = .regular) -> some View {
         if #available(macOS 26.0, *) {
-            buttonStyle(.glassProminent)
+            self
+                .controlSize(controlSize)
+                .buttonStyle(.glassProminent)
         } else {
-            buttonStyle(.borderedProminent)
+            self
+                .controlSize(controlSize)
+                .buttonStyle(.borderedProminent)
         }
     }
 
@@ -28,40 +58,48 @@ extension View {
         }
     }
 
+    func inspectorContentSurface(cornerRadius: CGFloat = 14) -> some View {
+        modifier(InspectorContentSurfaceModifier(cornerRadius: cornerRadius))
+    }
+
     @ViewBuilder
-    func adaptiveFunctionalGlass(cornerRadius: CGFloat = 18, interactive: Bool = false) -> some View {
+    func adaptiveBackgroundExtension() -> some View {
         if #available(macOS 26.0, *) {
-            glassEffect(
-                interactive ? .regular.interactive() : .regular,
-                in: .rect(cornerRadius: cornerRadius)
-            )
+            backgroundExtensionEffect()
         } else {
-            background(
-                .thickMaterial,
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-            }
+            self
         }
     }
 }
 
 struct InspectorBackdrop: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor)
 
-            if !reduceTransparency {
+            if !reduceTransparency && colorScheme == .light {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.08),
+                        Color.clear,
+                        Color.black.opacity(0.01)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+
+            if !reduceTransparency && colorScheme == .light {
                 GeometryReader { proxy in
                     Circle()
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    Color(red: 0.29, green: 0.63, blue: 0.53).opacity(0.17),
+                                    Color(red: 0.29, green: 0.63, blue: 0.53)
+                                        .opacity(0.075),
                                     .clear
                                 ],
                                 center: .center,
@@ -77,7 +115,8 @@ struct InspectorBackdrop: View {
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    Color(red: 0.84, green: 0.55, blue: 0.25).opacity(0.12),
+                                    Color(red: 0.84, green: 0.55, blue: 0.25)
+                                        .opacity(0.055),
                                     .clear
                                 ],
                                 center: .center,
@@ -93,6 +132,47 @@ struct InspectorBackdrop: View {
             }
         }
         .ignoresSafeArea()
+    }
+}
+
+private struct InspectorContentSurfaceModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(surfaceStyle)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        Color.primary.opacity(colorSchemeContrast == .increased ? 0.2 : 0.09),
+                        lineWidth: 1
+                    )
+            }
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .trim(from: 0.06, to: 0.46)
+                    .stroke(Color.white.opacity(reduceTransparency ? 0 : 0.2), lineWidth: 0.8)
+                    .padding(0.5)
+                    .allowsHitTesting(false)
+            }
+            .shadow(
+                color: Color.black.opacity(reduceTransparency ? 0 : 0.055),
+                radius: 14,
+                y: 5
+            )
+    }
+
+    private var surfaceStyle: AnyShapeStyle {
+        if reduceTransparency || colorSchemeContrast == .increased {
+            return AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
+        }
+        return AnyShapeStyle(Color(nsColor: .controlBackgroundColor).opacity(0.74))
     }
 }
 
@@ -135,6 +215,7 @@ private struct LiquidGlassFindingSortPicker: View {
                 }
             }
         }
+        .controlSize(.regular)
         .animation(.spring(response: 0.34, dampingFraction: 1), value: selection)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("排序")

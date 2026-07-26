@@ -1,6 +1,6 @@
-# Mac Disk Inspector
+# Mac 磁盘扫描助手
 
-Mac Disk Inspector 是一个原生 macOS、默认只读的“可解释磁盘诊断器”。它回答三个问题：
+Mac 磁盘扫描助手（英文名：Mac Disk Inspector）是一个原生 macOS、默认只读的“可解释磁盘诊断器”。它回答三个问题：
 
 1. 空间实际分配给了什么；
 2. 为什么这些数据会出现、风险是什么；
@@ -19,7 +19,9 @@ Mac Disk Inspector 是一个原生 macOS、默认只读的“可解释磁盘诊�
 - 以设备号和 inode 去重硬链接；
 - 记录权限、元数据、跨卷和符号链接问题，并明确展示访问缺口；
 - 将扫描证据映射为 Finding：路径、allocated/logical bytes、文件数、修改时间、来源、类别、风险、置信度、解释、候选空间和建议；
-- 首批规则覆盖 npm、`Library/Caches`、Gemini/Antigravity `browser_recordings`、Cursor `state.vscdb`、微信容器、Chrome `OnDeviceModel`、swapfile 和系统区域；
+- 解释 macOS Library/Application Support/Containers、系统运行目录、浏览器资料、云盘与媒体资料库；
+- 覆盖 Xcode、Simulator、Docker、Homebrew、Node.js、npm、常见包管理器以及 AI 开发工具数据；
+- 覆盖 Adobe、Figma、专业视频应用、Steam、微信、QQ、Chrome、Edge、Firefox 和 Safari 等高占用来源；
 - 仅从编译进 App 的固定 allowlist 提供命令，且只复制、不执行。
 - 在 macOS 26 及以上采用原生 Liquid Glass 功能层；macOS 13–15 自动回退到标准材质。
 
@@ -70,7 +72,7 @@ SECURITY.md                 漏洞报告与安全政策
 
 ## 隐私与权限
 
-扫描仅在用户点击“选择目录并扫描”后开始。遇到 Mail、Messages、Safari 等受 TCC 保护的目录时，App 记录权限缺口，不推断其内容，也不会诱导用户授予全磁盘访问权限。是否授予权限由用户根据自己的诊断目标决定。
+扫描仅在用户点击“选择目录并扫描”后开始。Mail、Messages、Safari、其他 App 的 Containers 与 Group Containers 等范围默认跳过；用户主动开启后，App 才会在实际扫描到相应位置时交由 macOS 询问权限。被跳过或拒绝的位置会记录为覆盖缺口，不会被推断为 0 B。
 
 详细边界见 [Documentation/PRODUCT_AND_SAFETY.md](Documentation/PRODUCT_AND_SAFETY.md)。
 
