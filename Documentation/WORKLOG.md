@@ -95,3 +95,13 @@
 - 使用独立 Bundle ID 的视觉测试 App，分别在 macOS 26 深色、浅色外观下检查标题栏与主体；两种外观均保持连续同色，侧栏保留原生导航材质层级。
 - 验收后恢复用户原来的深色外观，且未中断用户正在运行的扫描。
 - 39 项单元测试、源码安全检查与 `git diff --check` 均通过；未扫描用户文件，未执行清理操作。
+
+## 2026-07-26 统一社区版发布链
+
+- 确认此前的 DMG 是本地生成后通过 GitHub CLI 上传；`Build community package` 没有历史运行记录，且只会生成临时 artifact。
+- 新增 `Publish community release` 手动入口：校验 `main`、确认词、版本格式、Xcode 版本、预览版状态及重复 tag 后，再执行测试、DMG 构建和公开发布。
+- Release 先保持草稿并上传 DMG 与 SHA-256，附件完整后才公开，避免官网同步到缺少安装包的 Release。
+- GitHub 内置令牌创建的 Release 不会再次触发工作流，因此官网部署工作流增加可复用入口，由统一发布链显式调用；用户手动发布 Release 时仍监听 `release.published`。
+- `CF_PAGES_DEPLOY_HOOK` 继续严格从 Secret 读取；`WEBSITE_RELEASE_STATUS_URL` 继续支持 Secret 或 Variable，未写入任何真实凭据。
+- YAML 与 Shell 语法、版本匹配/不匹配及远端重复版本预检均通过；锁定的 PDF 依赖在隔离环境安装和运行成功，39 项测试、核心验收与源码安全检查通过。
+- 本地完整生成并只读挂载验证 `0.2.3-preview.2` 测试 DMG，双架构、签名、背景、说明文档及 Finder 布局均通过，未创建或修改任何线上 Release。

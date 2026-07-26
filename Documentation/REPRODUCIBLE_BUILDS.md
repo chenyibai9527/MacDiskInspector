@@ -50,5 +50,8 @@ swift run DiskInspectorCoreVerification
 
 - `CI`：每次提交或 PR 运行测试、安全验收、Universal App 构建和源码不变量检查。
 - `Build community package`：维护者手动输入版本标签，构建 ZIP 与 SHA-256，并仅上传为 14 天的 Actions artifact。
+- `Publish community release`：维护者在 `main` 上输入并确认版本，工作流通过全部校验后构建 Universal DMG、发布 GitHub Release，再调用 Cloudflare Pages 官网部署；这是公开发布入口。
 
-工作流不会自动创建公开 Release。维护者必须下载并在干净账号或干净 Mac 上验收，再手动发布，同时附上校验和与未公证说明。
+`Build community package` 不会创建公开 Release；维护者应先用它完成干净账号或
+干净 Mac 验收。`Publish community release` 是显式确认后的公开发布操作，会自动
+附上经过校验的 DMG 与 SHA-256，并继续触发官网同步。

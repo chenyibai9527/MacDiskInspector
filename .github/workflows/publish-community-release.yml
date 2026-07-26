@@ -1,0 +1,193 @@
+name: Publish community release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_label:
+        description: Version without the v prefix, for example 0.2.3-preview.2
+        required: true
+        type: string
+      prerelease:
+        description: Publish as a GitHub prerelease
+        required: true
+        default: true
+        type: boolean
+      confirmation:
+        description: Type publish to confirm the public release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: community-release-${{ inputs.release_label }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    name: Build, verify, and publish
+    runs-on: macos-26
+    timeout-minutes: 45
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      release_tag: ${{ steps.metadata.outputs.release_tag }}
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate publication request
+        id: metadata
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+          RELEASE_LABEL: ${{ inputs.release_label }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::Public releases must be dispatched from the main branch."
+            exit 1
+          fi
+
+          if [[ "${CONFIRMATION}" != "publish" ]]; then
+            echo "::error::Set confirmation to exactly: publish"
+            exit 1
+          fi
+
+          ./Scripts/validate-release-label.sh "${RELEASE_LABEL}" \
+            | tee "${RUNNER_TEMP}/release-metadata.txt"
+
+          release_tag="v${RELEASE_LABEL}"
+          if [[ "${RELEASE_LABEL}" == *-* && "${IS_PRERELEASE}" != "true" ]]; then
+            echo "::error::A label with a prerelease suffix must be published as a prerelease."
+            exit 1
+          fi
+          if [[ "${RELEASE_LABEL}" != *-* && "${IS_PRERELEASE}" == "true" ]]; then
+            echo "::error::A stable label must not be published as a prerelease."
+            exit 1
+          fi
+
+          if git show-ref --verify --quiet "refs/tags/${release_tag}"; then
+            echo "::error::Tag ${release_tag} already exists."
+            exit 1
+          fi
+          if gh release view "${release_tag}" >/dev/null 2>&1; then
+            echo "::error::Release ${release_tag} already exists."
+            exit 1
+          fi
+
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_label=${RELEASE_LABEL}" >> "${GITHUB_OUTPUT}"
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+          python3 --version
+
+      - name: Run release tests
+        run: |
+          swift test
+          swift run DiskInspectorCoreVerification
+          ./Scripts/check-source-safety.sh
+
+      - name: Prepare isolated document tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv build/tools/distribution-docs-venv
+          build/tools/distribution-docs-venv/bin/python3 -m pip install \
+            --disable-pip-version-check \
+            --requirement Scripts/requirements-distribution-docs.txt
+
+      - name: Build and verify Universal DMG
+        env:
+          MDI_DOCS_PYTHON: ${{ github.workspace }}/build/tools/distribution-docs-venv/bin/python3
+          MDI_RELEASE_LABEL: ${{ steps.metadata.outputs.release_label }}
+        run: ./Scripts/package-dmg.sh
+
+      - name: Prepare release assets
+        id: assets
+        env:
+          RELEASE_LABEL: ${{ steps.metadata.outputs.release_label }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dmg="build/distribution/Mac磁盘扫描助手-${RELEASE_LABEL}-universal.dmg"
+          asset_dir="build/release-assets"
+          release_dmg="${asset_dir}/MacDiskInspector-${RELEASE_LABEL}-universal.dmg"
+          checksum="${release_dmg}.sha256"
+
+          test -f "${source_dmg}"
+          mkdir -p "${asset_dir}"
+          ditto "${source_dmg}" "${release_dmg}"
+          (
+            cd "${asset_dir}"
+            shasum -a 256 "$(basename "${release_dmg}")" \
+              > "$(basename "${checksum}")"
+            shasum -a 256 -c "$(basename "${checksum}")"
+          )
+
+          echo "release_dmg=${release_dmg}" >> "${GITHUB_OUTPUT}"
+          echo "checksum=${checksum}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload verified assets for recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: MacDiskInspector-${{ steps.metadata.outputs.release_label }}-release-assets
+          path: build/release-assets/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create draft, upload assets, and publish
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+          RELEASE_DMG: ${{ steps.assets.outputs.release_dmg }}
+          CHECKSUM: ${{ steps.assets.outputs.checksum }}
+          RELEASE_LABEL: ${{ steps.metadata.outputs.release_label }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="Mac 磁盘扫描助手 ${RELEASE_LABEL}"
+
+          gh release create "${RELEASE_TAG}" \
+            "${RELEASE_DMG}#Mac 磁盘扫描助手 ${RELEASE_LABEL} Universal DMG" \
+            "${CHECKSUM}#SHA-256 checksum" \
+            --draft \
+            --generate-notes \
+            --target "${GITHUB_SHA}" \
+            --title "${title}"
+
+          edit_args=(--draft=false)
+          if [[ "${IS_PRERELEASE}" == "true" ]]; then
+            edit_args+=(--prerelease)
+          else
+            edit_args+=(--prerelease=false)
+          fi
+          gh release edit "${RELEASE_TAG}" "${edit_args[@]}"
+
+          release_id="$(
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+              --jq '.id'
+          )"
+          test -n "${release_id}"
+          echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"
+
+  deploy-website:
+    name: Deploy and verify website
+    needs: build-and-publish
+    uses: ./.github/workflows/deploy-website-on-release.yml
+    with:
+      release_id: ${{ needs.build-and-publish.outputs.release_id }}
+      release_tag: ${{ needs.build-and-publish.outputs.release_tag }}
+    secrets: inherit

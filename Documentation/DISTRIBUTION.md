@@ -116,11 +116,43 @@ export MDI_NOTARY_PROFILE="MacDiskInspector-Notary"
 - 测试 macOS 13、14、15 和当前版本；
 - 保留公证日志与构建 tag。
 
+## 一次完成社区版发布
+
+维护者无需再在本地依次打包、创建 Release 和上传文件。打开 GitHub 仓库的
+**Actions → Publish community release → Run workflow**，并填写：
+
+- `release_label`：不带 `v` 的版本，例如 `0.2.3-preview.2`；
+- `prerelease`：预览版保持开启，稳定版关闭；
+- `confirmation`：准确输入 `publish`，避免误触公开发布。
+
+必须从 `main` 分支运行。工作流会依次：
+
+1. 检查标签格式，并要求标签中的基础版本与 Xcode
+   `MARKETING_VERSION` 一致；
+2. 拒绝已经存在的 tag 或 Release，并核对预览版状态；
+3. 运行单元测试、核心验收和源码安全检查；
+4. 构建、挂载并验证包含 `arm64`、`x86_64` 的 DMG；
+5. 生成并复验 SHA-256，将两份文件保留为 14 天的 Actions artifact；
+6. 先创建草稿、上传完整附件，再公开发布 GitHub Release；
+7. 直接调用官网部署工作流，并通过配置的 `/release.json` 核验版本。
+
+例如，当前 Xcode `MARKETING_VERSION` 为 `0.2.3` 时，可以发布
+`0.2.3-preview.2`，不能直接发布 `0.2.4-preview.1`。准备 `0.2.4` 时，应先在
+代码中更新 `MARKETING_VERSION`、完成普通 CI，再运行发布工作流。
+
+GitHub 使用工作流内置的 `GITHUB_TOKEN` 创建 Release 时，不会让这个 Release
+再次触发其他工作流。统一发布流程因此会在 Release 完成后显式调用官网部署；
+用户在 GitHub 页面手动发布的 Release，仍由下述 `release.published` 事件触发。
+
+`Build community package` 保留为不会公开发布的预检入口。它只生成临时 ZIP
+artifact，适合在正式发布前交给维护者检查；它不会创建 Release，也不会部署官网。
+
 ## Release 发布后同步 Cloudflare Pages 官网
 
 `.github/workflows/deploy-website-on-release.yml` 监听 GitHub Release 的
-`published` 事件。正式 Release 和 prerelease 都会触发，因为官网当前使用
-`RELEASE_CHANNEL=preview`，会从公开 Release 中选择最新的 Universal DMG。
+`published` 事件，同时可被统一发布工作流直接调用。正式 Release 和 prerelease
+都会部署，因为官网当前使用 `RELEASE_CHANNEL=preview`，会从公开 Release 中
+选择最新的 Universal DMG。
 [GitHub Actions 官方文档](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#release)
 也明确建议：需要同时覆盖正式版与预发布版时，应监听 `published`，而不是组合
 `released` 与 `prereleased`。
