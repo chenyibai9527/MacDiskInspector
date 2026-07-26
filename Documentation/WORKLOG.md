@@ -105,3 +105,5 @@
 - `CF_PAGES_DEPLOY_HOOK` 继续严格从 Secret 读取；`WEBSITE_RELEASE_STATUS_URL` 继续支持 Secret 或 Variable，未写入任何真实凭据。
 - YAML 与 Shell 语法、版本匹配/不匹配及远端重复版本预检均通过；锁定的 PDF 依赖在隔离环境安装和运行成功，39 项测试、核心验收与源码安全检查通过。
 - 本地完整生成并只读挂载验证 `0.2.3-preview.2` 测试 DMG，双架构、签名、背景、说明文档及 Finder 布局均通过，未创建或修改任何线上 Release。
+- `0.2.3-preview.2` 统一发布工作流在线运行成功，Release、Cloudflare Pages 部署与官网 `/release.json` 验证全部通过。
+- 根据运行注解将 `actions/upload-artifact` 从 Node.js 20 的 `v4` 升级至 Node.js 24 的 `v7`，并把备用社区打包工作流的 `actions/checkout` 统一升级至 `v6`。
