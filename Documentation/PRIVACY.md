@@ -40,4 +40,7 @@ macOS 的 TCC、ACL 和 POSIX 权限仍可能阻止访问。失败路径只在�
 
 ## 开源验证
 
-用户可以检查 `Sources/`、`App/MacDiskInspector.entitlements` 和构建脚本，验证发行版应有的权限。官网下载页应同时公布签名 Team ID、版本哈希和源代码标签。
+用户可以在
+[GitHub 公开仓库](https://github.com/chenyibai9527/MacDiskInspector)
+检查 `Sources/`、`App/MacDiskInspector.entitlements` 和构建脚本，验证发行版
+应有的权限。官网下载页应同时公布签名 Team ID、版本哈希和源代码标签。

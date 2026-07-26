@@ -2,6 +2,8 @@
 
 Mac 磁盘扫描助手（英文名：Mac Disk Inspector）是一个原生 macOS、默认只读的“可解释磁盘诊断器”。它回答三个问题：
 
+项目主页：[github.com/chenyibai9527/MacDiskInspector](https://github.com/chenyibai9527/MacDiskInspector)
+
 1. 空间实际分配给了什么；
 2. 为什么这些数据会出现、风险是什么；
 3. 用户可以去哪里验证，并由用户自己决定是否处理。
@@ -99,3 +101,6 @@ SECURITY.md                 漏洞报告与安全政策
 GitHub Actions 会在每个 PR 上运行单元测试、核心安全验收、Universal App 构建与源码安全不变量检查。社区包工作流只生成供维护者复核的 artifact，不会自动公开发布。
 
 项目使用 [MIT License](LICENSE) 开源。
+
+发现问题可前往 [GitHub Issues](https://github.com/chenyibai9527/MacDiskInspector/issues)；
+安全漏洞请遵循 [安全政策](SECURITY.md)，不要先公开漏洞细节。

@@ -1,6 +1,14 @@
 import AppKit
 import SwiftUI
 
+private enum ProjectLinks {
+    static let repository = URL(
+        string: "https://github.com/chenyibai9527/MacDiskInspector"
+    )!
+    static let issues = repository.appending(path: "issues")
+    static let license = repository.appending(path: "blob/main/LICENSE")
+}
+
 struct AboutView: View {
     @State private var showsLicense = false
 
@@ -49,9 +57,21 @@ struct AboutView: View {
                 AboutInfoRow(
                     systemImage: "chevron.left.forwardslash.chevron.right",
                     title: "开放源代码",
-                    detail: "采用 MIT License。正式仓库地址将在首次公开发布时公布。",
+                    detail: "采用 MIT License。源代码、构建脚本和安全边界均可公开检查。",
                     tint: .accentColor
                 )
+
+                HStack(spacing: 10) {
+                    Link(destination: ProjectLinks.repository) {
+                        Label("查看源代码", systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Link(destination: ProjectLinks.issues) {
+                        Label("报告问题", systemImage: "exclamationmark.bubble")
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
             .padding(18)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -141,6 +161,28 @@ struct SettingsView: View {
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
+
+                Section("开源与反馈") {
+                    Link(destination: ProjectLinks.repository) {
+                        Label(
+                            "查看 GitHub 仓库",
+                            systemImage: "chevron.left.forwardslash.chevron.right"
+                        )
+                    }
+
+                    Link(destination: ProjectLinks.issues) {
+                        Label("报告问题或提出建议", systemImage: "exclamationmark.bubble")
+                    }
+
+                    Link(destination: ProjectLinks.license) {
+                        Label("查看 MIT License", systemImage: "doc.text")
+                    }
+
+                    Text("github.com/chenyibai9527/MacDiskInspector")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
             }
             .formStyle(.grouped)

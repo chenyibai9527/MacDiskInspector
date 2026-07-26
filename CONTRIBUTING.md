@@ -2,6 +2,9 @@
 
 感谢你帮助改进 Mac 磁盘扫描助手。这个项目最重要的约束不是“发现更多可删除内容”，而是避免把不确定数据描述成安全可删。
 
+- [查看开放 Issue](https://github.com/chenyibai9527/MacDiskInspector/issues)
+- [提交新的 Issue](https://github.com/chenyibai9527/MacDiskInspector/issues/new/choose)
+
 ## 开始之前
 
 需要 macOS 13+、Xcode 26 或兼容工具链。首次使用：
