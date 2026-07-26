@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MDI_PROJECT_ROOT=${0:A:h:h}
-MDI_DERIVED_DATA="$MDI_PROJECT_ROOT/build/DerivedData"
+MDI_DERIVED_DATA=${MDI_DERIVED_DATA:-"$MDI_PROJECT_ROOT/build/DerivedData.noindex"}
 MDI_BUILD_NUMBER=${MDI_BUILD_NUMBER:-$(date -u +%Y%m%d%H%M%S)}
 
 if [[ ! "$MDI_BUILD_NUMBER" =~ '^[0-9]{1,18}$' ]]; then

@@ -4,7 +4,8 @@ set -euo pipefail
 MDI_PROJECT_ROOT=${0:A:h:h}
 MDI_APP_NAME="Mac 磁盘扫描助手.app"
 MDI_BINARY_NAME="MacDiskInspector"
-MDI_APP_PATH="$MDI_PROJECT_ROOT/build/DerivedData/Build/Products/Release/$MDI_APP_NAME"
+MDI_DERIVED_DATA=${MDI_DERIVED_DATA:-"$MDI_PROJECT_ROOT/build/DerivedData.noindex"}
+MDI_APP_PATH="$MDI_DERIVED_DATA/Build/Products/Release/$MDI_APP_NAME"
 MDI_OUTPUT_DIR="$MDI_PROJECT_ROOT/build/distribution"
 MDI_DOCS_DIR="$MDI_PROJECT_ROOT/output/pdf"
 MDI_DMG_ASSETS_DIR="$MDI_PROJECT_ROOT/Distribution/DMG"

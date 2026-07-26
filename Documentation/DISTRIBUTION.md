@@ -18,7 +18,7 @@
 产物位于：
 
 ```text
-build/DerivedData/Build/Products/Release/Mac 磁盘扫描助手.app
+build/DerivedData.noindex/Build/Products/Release/Mac 磁盘扫描助手.app
 ```
 
 该脚本会在无需 Developer ID 的情况下进行 ad-hoc 签名，保留 App Sandbox 和“用户选择目录只读” entitlement。它仍不代表 Apple 已验证或已公证。

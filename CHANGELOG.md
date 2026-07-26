@@ -5,6 +5,10 @@
 
 ## 未发布
 
+### 工程
+
+- 将本地 Xcode 构建缓存迁移到 `build/DerivedData.noindex`，防止开发构建的 `.app` 被 Spotlight 和 App 启动器当作第二份已安装应用。
+
 ## [0.2.1-preview.1] - 2026-07-26
 
 ### 安全修复
