@@ -5,10 +5,18 @@
 
 ## 未发布
 
+## [0.2.3-preview.3] - 2026-07-27
+
 ### 工程
 
 - GitHub Actions 的检出与 Artifact 上传组件升级到 Node.js 24 版本，移除 Node.js 20 弃用警告。
 - 本地构建完成后自动从 LaunchServices 注销构建产物，避免开发版本与正式安装版同时出现在 App 启动器中。
+- 发布工作流新增对应版本更新日志检查，缺少章节时拒绝创建公开 Release。
+
+### 验证
+
+- Node.js 24 社区包预检成功且无 Actions Annotations；本地及 GitHub CI 的 Universal App 构建、双架构和源码安全检查通过。
+- 发布标签校验确认 `0.2.3-preview.3` 与 Xcode 版本及本章节一致。
 
 ## [0.2.3-preview.2] - 2026-07-26
 
