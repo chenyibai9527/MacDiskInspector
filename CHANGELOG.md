@@ -5,6 +5,13 @@
 
 ## 未发布
 
+### 工程
+
+- GitHub Actions 的检出与 Artifact 上传组件升级到 Node.js 24 版本，移除 Node.js 20 弃用警告。
+- 本地构建完成后自动从 LaunchServices 注销构建产物，避免开发版本与正式安装版同时出现在 App 启动器中。
+
+## [0.2.3-preview.2] - 2026-07-26
+
 ### 修复
 
 - 让主内容背景贯穿全尺寸窗口并隐藏工具栏的独立材质层，消除深色模式下标题栏与主体的色差；同时移除标题栏分隔线，浅色与深色外观保持一致。
@@ -12,8 +19,11 @@
 ### 工程
 
 - 新增统一的手动发布工作流，一次完成版本校验、测试、Universal DMG 构建、Release 发布和官网部署验证。
-- GitHub Actions 的检出与 Artifact 上传组件升级到 Node.js 24 版本，移除 Node.js 20 弃用警告。
-- 本地构建完成后自动从 LaunchServices 注销构建产物，避免开发版本与正式安装版同时出现在 App 启动器中。
+- 补齐此前遗漏的 `0.2.2-preview.1`、`0.2.2-preview.2` 和 `0.2.3-preview.1` 更新日志。
+
+### 验证
+
+- 统一发布工作流在线完成 Universal DMG、GitHub Release、Cloudflare Pages 部署及官网 `/release.json` 版本验证。
 
 ## [0.2.3-preview.1] - 2026-07-26
 

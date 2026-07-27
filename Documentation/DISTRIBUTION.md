@@ -130,7 +130,7 @@ export MDI_NOTARY_PROFILE="MacDiskInspector-Notary"
 必须从 `main` 分支运行。工作流会依次：
 
 1. 检查标签格式，并要求标签中的基础版本与 Xcode
-   `MARKETING_VERSION` 一致；
+   `MARKETING_VERSION` 一致，同时要求 `CHANGELOG.md` 已存在对应版本章节；
 2. 拒绝已经存在的 tag 或 Release，并核对预览版状态；
 3. 运行单元测试、核心验收和源码安全检查；
 4. 构建、挂载并验证包含 `arm64`、`x86_64` 的 DMG；
@@ -141,6 +141,10 @@ export MDI_NOTARY_PROFILE="MacDiskInspector-Notary"
 例如，当前 Xcode `MARKETING_VERSION` 为 `0.2.3` 时，可以发布
 `0.2.3-preview.2`，不能直接发布 `0.2.4-preview.1`。准备 `0.2.4` 时，应先在
 代码中更新 `MARKETING_VERSION`、完成普通 CI，再运行发布工作流。
+
+发布前还应把本次内容从“未发布”移动到类似
+`## [0.2.3-preview.3] - YYYY-MM-DD` 的正式章节。工作流会在章节缺失时失败，
+避免 GitHub Release 已发布而仓库更新日志仍停留在旧版本。
 
 GitHub 使用工作流内置的 `GITHUB_TOKEN` 创建 Release 时，不会让这个 Release
 再次触发其他工作流。统一发布流程因此会在 Release 完成后显式调用官网部署；

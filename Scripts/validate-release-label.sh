@@ -3,6 +3,7 @@ set -euo pipefail
 
 MDI_PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 MDI_PROJECT_FILE="$MDI_PROJECT_ROOT/MacDiskInspector.xcodeproj/project.pbxproj"
+MDI_CHANGELOG="$MDI_PROJECT_ROOT/CHANGELOG.md"
 MDI_RELEASE_LABEL=${1:-}
 
 if [[ ! "$MDI_RELEASE_LABEL" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
@@ -33,6 +34,12 @@ fi
 if [[ "$MDI_PROJECT_VERSIONS" != "$MDI_APP_VERSION" ]]; then
   echo "Release label $MDI_RELEASE_LABEL targets app version $MDI_APP_VERSION," >&2
   echo "but the Xcode project MARKETING_VERSION is $MDI_PROJECT_VERSIONS." >&2
+  exit 1
+fi
+
+if ! grep -Fq "## [$MDI_RELEASE_LABEL] -" "$MDI_CHANGELOG"; then
+  echo "CHANGELOG.md has no release section for $MDI_RELEASE_LABEL." >&2
+  echo "Move the intended entries out of 未发布 before publishing." >&2
   exit 1
 fi
 
